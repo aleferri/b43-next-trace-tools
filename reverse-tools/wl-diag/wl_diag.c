@@ -80,6 +80,8 @@ enum wldiag_op {
 	OP_TBL_R, OP_TBL_W, OP_DELAY,			/* 13,14,15 (append) */
 	OP_MAC_MCTRL, OP_MAC_MHF_W, OP_MAC_MHF_R,	/* 16,17,18 (append) */
 	OP_PHY_AND, OP_PHY_OR,				/* 19,20 (append) */
+	OP_SI_COREREG,					/* 21 (append) */
+	OP_ARGX, OP_RETVAL,				/* 22,23 (append) */
 	OP_DROP = 255,
 };
 struct wldiag_rec {
@@ -94,7 +96,7 @@ static DECLARE_WAIT_QUEUE_HEAD(rq);
 static atomic_t seq = ATOMIC_INIT(0);
 static atomic_t drops = ATOMIC_INIT(0);
 
-static void emit(u8 op, u32 addr, u32 val, u32 aux)
+static u32 emit(u8 op, u32 addr, u32 val, u32 aux)
 {
 	struct wldiag_rec r;
 	unsigned long flags;
@@ -111,6 +113,7 @@ static void emit(u8 op, u32 addr, u32 val, u32 aux)
 		atomic_inc(&drops);
 	raw_spin_unlock_irqrestore(&fifo_lock, flags);
 	wake_up_interruptible(&rq);
+	return r.seq;
 }
 
 /* ---- tabella hook ----------------------------------------------------- *
@@ -121,12 +124,14 @@ struct hook {
 	const char *name;
 	u8 op, addr_src, val_src, aux_src;
 	bool shortj;		/* true: detour a 1 parola 'j' (branch nella finestra a 4) */
+	bool retcap;		/* true: cattura il valore di ritorno via trampolino ra */
+	u8 nargx;		/* # arg extra su stack da catturare: arg5@16(sp), arg6@20(sp) */
 	unsigned long addr;
 	u32 saved[4];
 	bool armed;
 };
 static struct hook hooks[] = {
-	{ "phy_reg_read",       OP_PHY_R,     1, 0, 0 },
+	{ "phy_reg_read",       OP_PHY_R,     1, 0, 0, false, true, 0 },
 	{ "phy_reg_write",      OP_PHY_W,     1, 2, 0 },
 	{ "phy_reg_mod",        OP_PHY_MOD,   1, 3, 2 },
 	/* and/or: reg unico op (addr,val). Op-code distinti cosi' il decoder sa
@@ -136,9 +141,14 @@ static struct hook hooks[] = {
 	{ "phy_reg_or",         OP_PHY_OR,    1, 2, 0 },
 	{ "write_radio_reg",    OP_RADIO_W,   1, 2, 0 },
 	{ "mod_radio_reg",      OP_RADIO_MOD, 1, 3, 2 },
-	{ "si_pmu_chipcontrol", OP_PMU_CC,    1, 3, 2 },
-	{ "si_pmu_regcontrol",  OP_PMU_RC,    1, 3, 2 },
-	{ "si_pmu_pllcontrol",  OP_PMU_PLL,   1, 3, 2 },
+	{ "si_pmu_chipcontrol", OP_PMU_CC,    1, 3, 2, false, true, 0 },
+	{ "si_pmu_regcontrol",  OP_PMU_RC,    1, 3, 2, false, true, 0 },
+	{ "si_pmu_pllcontrol",  OP_PMU_PLL,   1, 3, 2, false, true, 0 },
+	/* si_corereg(sih, coreidx, regoff, mask, val): accesso generico a un
+	 * registro di un core del backplane. addr=regoff(a2), aux=coreidx(a1).
+	 * val (a4, 5o arg) e' sullo stack in o32 -> catturato via nargx (record
+	 * ARGX di continuazione). retcap: il ritorno (read/rmw) va nel RETVAL. */
+	{ "si_corereg",         OP_SI_COREREG,2, 0, 1, false, true, 1 },
 	/* ChipCommon GPIO (sih, mask, val, prio): mask=a1, val=a2 */
 	{ "si_gpiocontrol",     OP_CC_GPIOCTL,0, 2, 1 },
 	{ "si_gpioout",         OP_CC_GPIOOUT,0, 2, 1 },
@@ -160,12 +170,12 @@ static struct hook hooks[] = {
 	 *   wlc_bmac_mhf_get(hw, u8 idx, int bands) idx=a1 (val UNDEFINED) */
 	{ "wlc_bmac_mctrl",     OP_MAC_MCTRL, 0, 2, 1 },
 	{ "wlc_bmac_mhf",       OP_MAC_MHF_W, 1, 3, 2 },
-	{ "wlc_bmac_mhf_get",   OP_MAC_MHF_R, 1, 0, 0 },
+	{ "wlc_bmac_mhf_get",   OP_MAC_MHF_R, 1, 0, 0, false, true, 0 },
 	/* branch a slot 3 (beq): detour classico a 4 parole impossibile. short-j a
 	 * 1 parola: o[0]=j stub; o[1] (addiu $v0,1) resta come delay slot; lo stub
 	 * riesegue o[0..1] e rientra a +8 (v0 ri-settato DOPO la hook). addr=a1
 	 * grezzo (l'andi 0xffff e' o[0], rieseguito nello stub). */
-	{ "read_radio_reg",     OP_RADIO_R,   1, 0, 0, true },
+	{ "read_radio_reg",     OP_RADIO_R,   1, 0, 0, true, true, 0 },
 };
 #define NHOOK ARRAY_SIZE(hooks)
 
@@ -174,19 +184,103 @@ static inline u32 pick(u8 src, u32 a1, u32 a2, u32 a3)
 {
 	return src == 1 ? a1 : src == 2 ? a2 : src == 3 ? a3 : 0;
 }
-void __used noinline
+u32 __used noinline
 wl_diag_hook(u32 id, u32 a1, u32 a2, u32 a3)
 {
 	struct hook *h = &hooks[id];
 
-	emit(h->op, pick(h->addr_src, a1, a2, a3),
-		    pick(h->val_src,  a1, a2, a3),
-		    pick(h->aux_src,  a1, a2, a3));
+	return emit(h->op, pick(h->addr_src, a1, a2, a3),
+			   pick(h->val_src,  a1, a2, a3),
+			   pick(h->aux_src,  a1, a2, a3));
+}
+
+/* Record di continuazione per gli arg su stack (o32): un secondo record ARGX
+ * legato al principale via parent_seq. addr=arg5, val=arg6. */
+void __used noinline
+wl_diag_hook_argx(u32 parent_seq, u32 x1, u32 x2)
+{
+	emit(OP_ARGX, x1, x2, parent_seq);
+}
+
+/* ---- cattura valore di ritorno (retcap): trampolino su 'ra' ------------ *
+ * L'origine di 'ra' e' salvata PER-INVOCAZIONE in un pool indicizzato da     *
+ * 'current' (task): sopravvive a preemption/migrazione (SMP+PREEMPT) al       *
+ * contrario di uno slot per-CPU. LIFO per gestire il nesting (una read        *
+ * agganciata che ne chiama un'altra). Pool pieno -> NON dirotta (nessun       *
+ * crash, si perde solo quel valore). */
+struct ret_inst {
+	struct task_struct *task;
+	unsigned long orig_ra;
+	u32 seq;
+	u32 order;
+};
+#define RET_POOL 64
+static struct ret_inst ret_pool[RET_POOL];
+static DEFINE_RAW_SPINLOCK(ret_lock);
+static u32 ret_order;
+static unsigned long ret_trampoline;	/* indirizzo dello stub di ritorno condiviso */
+
+/* ingresso di un retcap: registra (current, orig_ra, seq); ritorna l'indirizzo
+ * di 'ra' da installare (trampolino se c'e' posto, altrimenti orig_ra). */
+unsigned long __used noinline
+wl_diag_enter_ret(unsigned long orig_ra, u32 seq)
+{
+	unsigned long f;
+	int i;
+
+	if (!ret_trampoline)
+		return orig_ra;
+	raw_spin_lock_irqsave(&ret_lock, f);
+	for (i = 0; i < RET_POOL; i++) {
+		if (!ret_pool[i].task) {
+			ret_pool[i].task = current;
+			ret_pool[i].orig_ra = orig_ra;
+			ret_pool[i].seq = seq;
+			ret_pool[i].order = ++ret_order;
+			raw_spin_unlock_irqrestore(&ret_lock, f);
+			return ret_trampoline;
+		}
+	}
+	raw_spin_unlock_irqrestore(&ret_lock, f);
+	return orig_ra;
+}
+
+/* ritorno di un retcap: preleva LIFO l'istanza di current, emette RETVAL(seq,
+ * retval) e ritorna orig_ra. Chiamata solo se enter aveva dirottato -> per
+ * costruzione l'istanza esiste; guardia difensiva se best<0. */
+unsigned long __used noinline
+wl_diag_exit_ret(u32 retval)
+{
+	unsigned long f, ra = 0;
+	int i, best = -1;
+	u32 bestord = 0, seq = 0;
+
+	raw_spin_lock_irqsave(&ret_lock, f);
+	for (i = 0; i < RET_POOL; i++)
+		if (ret_pool[i].task == current && ret_pool[i].order >= bestord) {
+			bestord = ret_pool[i].order;
+			best = i;
+		}
+	if (best >= 0) {
+		ra = ret_pool[best].orig_ra;
+		seq = ret_pool[best].seq;
+		ret_pool[best].task = NULL;
+	}
+	raw_spin_unlock_irqrestore(&ret_lock, f);
+	if (best >= 0)
+		emit(OP_RETVAL, seq, retval, 0);
+	return ra;
 }
 
 /* ---- mini-assembler MIPS o32 (codifiche verificate) ------------------- */
 #define R_ZERO 0
+#define R_V0 2
+#define R_V1 3
 #define R_A0 4
+#define R_A1 5
+#define R_A2 6
+#define R_A3 7
+#define R_T8 24
 #define R_T9 25
 #define R_SP 29
 #define R_RA 31
@@ -217,42 +311,100 @@ static bool is_branch(u32 insn)
 }
 
 /* ---- pool stub eseguibile (statico: vive nel modulo, mai liberato) ----- */
-#define STUB_WORDS 28
+#define STUB_WORDS 48
 static u32 stub_pool[NHOOK][STUB_WORDS] __attribute__((aligned(8)));
+static u32 ret_tramp[16] __attribute__((aligned(8)));	/* trampolino di ritorno condiviso */
 
 static void build_stub(int idx)
 {
 	u32 *s = stub_pool[idx];
 	u32 *o = (u32 *)hooks[idx].addr;
 	unsigned long hookfn = (unsigned long)&wl_diag_hook;
+	unsigned long argxfn = (unsigned long)&wl_diag_hook_argx;
+	unsigned long enterfn = (unsigned long)&wl_diag_enter_ret;
 	int rep = hooks[idx].shortj ? 2 : 4;	/* parole originali da rieseguire */
 	unsigned long ret = hooks[idx].addr + (hooks[idx].shortj ? 8 : 16);
 	int n = 0, k;
 
 	s[n++] = i_addiu(R_SP, R_SP, -32);
-	s[n++] = i_sw(4, R_SP, 0);   /* a0 */
-	s[n++] = i_sw(5, R_SP, 4);   /* a1 */
-	s[n++] = i_sw(6, R_SP, 8);   /* a2 */
-	s[n++] = i_sw(7, R_SP, 12);  /* a3 */
+	s[n++] = i_sw(R_A0, R_SP, 0);
+	s[n++] = i_sw(R_A1, R_SP, 4);
+	s[n++] = i_sw(R_A2, R_SP, 8);
+	s[n++] = i_sw(R_A3, R_SP, 12);
 	s[n++] = i_sw(R_RA, R_SP, 16);
-	s[n++] = i_ori(R_A0, R_ZERO, (u16)idx);          /* a0 = hookid */
+	/* wl_diag_hook(idx, a1, a2, a3) -> v0 = seq */
+	s[n++] = i_ori(R_A0, R_ZERO, (u16)idx);
 	s[n++] = i_lui(R_T9, hookfn >> 16);
 	s[n++] = i_ori(R_T9, R_T9, hookfn & 0xffff);
-	s[n++] = i_jalr(R_T9);                            /* a1..a3 = orig args */
+	s[n++] = i_jalr(R_T9);
 	s[n++] = I_NOP;
-	s[n++] = i_lw(4, R_SP, 0);
-	s[n++] = i_lw(5, R_SP, 4);
-	s[n++] = i_lw(6, R_SP, 8);
-	s[n++] = i_lw(7, R_SP, 12);
-	s[n++] = i_lw(R_RA, R_SP, 16);
+	s[n++] = i_sw(R_V0, R_SP, 20);		/* seq */
+
+	/* Arg extra su stack (o32): arg5@16(entry)=48(sp), arg6@20=52(sp).
+	 * wl_diag_hook_argx(seq, arg5, arg6) -> record ARGX di continuazione. */
+	if (hooks[idx].nargx) {
+		s[n++] = i_lw(R_A0, R_SP, 20);			/* seq */
+		s[n++] = i_lw(R_A1, R_SP, 48);			/* arg5 */
+		if (hooks[idx].nargx >= 2)
+			s[n++] = i_lw(R_A2, R_SP, 52);		/* arg6 */
+		else
+			s[n++] = i_ori(R_A2, R_ZERO, 0);
+		s[n++] = i_lui(R_T9, argxfn >> 16);
+		s[n++] = i_ori(R_T9, R_T9, argxfn & 0xffff);
+		s[n++] = i_jalr(R_T9);
+		s[n++] = I_NOP;
+	}
+
+	/* retcap: wl_diag_enter_ret(orig_ra, seq) -> v0 = ra da installare
+	 * (trampolino se c'e' posto, altrimenti orig_ra = nessun dirottamento). */
+	if (hooks[idx].retcap) {
+		s[n++] = i_lw(R_A0, R_SP, 16);			/* orig_ra */
+		s[n++] = i_lw(R_A1, R_SP, 20);			/* seq */
+		s[n++] = i_lui(R_T9, enterfn >> 16);
+		s[n++] = i_ori(R_T9, R_T9, enterfn & 0xffff);
+		s[n++] = i_jalr(R_T9);
+		s[n++] = I_NOP;
+		s[n++] = i_sw(R_V0, R_SP, 24);			/* ra da installare */
+	}
+
+	s[n++] = i_lw(R_A0, R_SP, 0);
+	s[n++] = i_lw(R_A1, R_SP, 4);
+	s[n++] = i_lw(R_A2, R_SP, 8);
+	s[n++] = i_lw(R_A3, R_SP, 12);
+	s[n++] = i_lw(R_RA, R_SP, hooks[idx].retcap ? 24 : 16);
 	s[n++] = i_addiu(R_SP, R_SP, 32);
 	for (k = 0; k < rep; k++)
-		s[n++] = o[k];   /* riesegue le parole spiazzate (o[1] short-j ri-setta v0) */
+		s[n++] = o[k];	/* riesegue le parole spiazzate (o[1] short-j ri-setta v0) */
 	s[n++] = i_lui(R_T9, ret >> 16);
 	s[n++] = i_ori(R_T9, R_T9, ret & 0xffff);
 	s[n++] = i_jr(R_T9);
 	s[n++] = I_NOP;
-	/* classic: n==25 ; short-j: n==23 ; entrambi <= STUB_WORDS */
+	/* max (classic+retcap+nargx) == 40 <= STUB_WORDS */
+}
+
+/* Trampolino di ritorno condiviso: la funzione agganciata retcap fa jr ra con
+ * ra == qui. Legge $v0 (valore restituito), lo consegna a wl_diag_exit_ret che
+ * emette RETVAL e ritorna orig_ra, quindi salta a orig_ra con $v0 preservato. */
+static void build_ret_trampoline(void)
+{
+	unsigned long exitfn = (unsigned long)&wl_diag_exit_ret;
+	u32 *s = ret_tramp;
+	int n = 0;
+
+	s[n++] = i_addiu(R_SP, R_SP, -32);
+	s[n++] = i_sw(R_V0, R_SP, 0);
+	s[n++] = i_sw(R_V1, R_SP, 4);
+	s[n++] = i_ori(R_A0, R_V0, 0);			/* a0 = retval (move) */
+	s[n++] = i_lui(R_T9, exitfn >> 16);
+	s[n++] = i_ori(R_T9, R_T9, exitfn & 0xffff);
+	s[n++] = i_jalr(R_T9);
+	s[n++] = I_NOP;
+	s[n++] = i_ori(R_T8, R_V0, 0);			/* t8 = orig_ra */
+	s[n++] = i_lw(R_V0, R_SP, 0);
+	s[n++] = i_lw(R_V1, R_SP, 4);
+	s[n++] = i_addiu(R_SP, R_SP, 32);
+	s[n++] = i_jr(R_T8);
+	s[n++] = I_NOP;
 }
 
 /* scrive l'ingresso, parola di testa PER ULTIMA (classic) o singola 'j' (short-j) */
@@ -450,6 +602,21 @@ static int __init wd_init(void)
 		build_stub(eligible[i]);
 	flush_i((unsigned long)stub_pool,
 		(unsigned long)stub_pool + sizeof(stub_pool));
+	{
+		int any_retcap = 0;
+
+		for (i = 0; i < n_elig; i++)
+			if (hooks[eligible[i]].retcap)
+				any_retcap = 1;
+		if (any_retcap) {
+			build_ret_trampoline();
+			flush_i((unsigned long)ret_tramp,
+				(unsigned long)ret_tramp + sizeof(ret_tramp));
+			ret_trampoline = (unsigned long)ret_tramp;
+			pr_info("wl_diag: trampolino ritorno @%px\n",
+				(void *)ret_trampoline);
+		}
+	}
 	for (i = 0; i < n_elig; i++) {
 		patch_entry(eligible[i]);
 		hooks[eligible[i]].armed = true;
@@ -461,6 +628,11 @@ static int __init wd_init(void)
 static void __exit wd_exit(void)
 {
 	int i;
+
+	/* stop nuovi dirottamenti di ra prima di ripristinare i prologhi; gli
+	 * stub in volo che hanno gia' dirottato tornano comunque via ret_tramp
+	 * (statico, valido), e synchronize_sched aspetta che completino. */
+	ret_trampoline = 0;
 
 	for (i = 0; i < NHOOK; i++)
 		if (hooks[i].armed) {
