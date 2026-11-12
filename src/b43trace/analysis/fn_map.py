@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Where each port function lands inside a vendor capture.
 
 One question, three ways to answer it, chosen by what is at hand and by how
@@ -39,9 +38,9 @@ different order. They do not align by sequence and must be compared by table
 the port.
 
 Usage:
-  fn_map.py coverage     <trace|flow:board> <raw-capture>
-  fn_map.py span         <trace|flow:board:capture> [<raw-capture>]
-  fn_map.py fingerprints <capture> [--src DIR]
+  b43trace fn-map coverage     <trace|flow:board> <raw-capture>
+  b43trace fn-map span         <trace|flow:board:capture> [<raw-capture>]
+  b43trace fn-map fingerprints <capture> [--src DIR]
 """
 import argparse
 import bisect
@@ -51,7 +50,7 @@ import os
 import re
 import sys
 
-import tracelib as T
+from b43trace import tracelib as T
 
 # The fingerprint of an op is what makes it recognizable in another trace: a
 # write with its value, or a modify with its mask of touched bits. Reads do not

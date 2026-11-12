@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
 """Trace reading, op normalization, and attribution of ops to functions.
 
 Three formats pass through here:
 
-  vendor capture   `<ts> #<ep> cpuN <op>`, produced by decode-wl-diag.py
+  vendor capture   `<ts> #<ep> cpuN <op>`, produced by b43trace decode-wl-diag
   port trace       `cpuN <op>`, produced by the harness in test/
   markers          `----FN:name----` / `----/FN:name----`, which the harness
                    interleaves into its own trace when AC_FN_MARKERS is set
@@ -22,6 +21,8 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+
+from b43trace.pipeline import trace_filter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "b43")
@@ -64,7 +65,7 @@ def norm(op):
     them. So is `sel=`, the shared-memory routing: the d6220 captures were
     decoded without it and the DSL ones and the integration harness carry it,
     and on the offset-in-bytes form of the address it adds nothing. And so is
-    `reg=`, the register name reverse-tools/mmio2ops.py appends for the
+    `reg=`, the register name mmio2ops appends for the
     reader: the offset already says which register it is.
     """
     op = " ".join(op.split())
@@ -403,19 +404,10 @@ def merge_retvals(path):
     without the folding every read has `val=UNDEFINED` and the value is not
     comparable.
     """
-    tmp = tempfile.NamedTemporaryFile(suffix=".merged", delete=False)
-    tmp.close()
-    r = subprocess.run([sys.executable,
-                        os.path.join(ROOT, "reverse-tools", "trace_filter.py"),
-                        "--retvals",
-                        materialize(path), tmp.name], capture_output=True,
-                       text=True)
-    # An empty oracle is worse than a crash: every read falls through to the
-    # mirror of the writes and the run diverges for a reason that looks like a
-    # defect of the port. So the failure is raised, not swallowed.
-    if r.returncode != 0 or os.path.getsize(tmp.name) == 0:
-        raise RuntimeError(f"merge_retvals failed on {path}: "
-                           f"{r.stderr.strip() or 'empty output'}")
+    lines = trace_filter.retvals_folded(materialize(path))
+    with tempfile.NamedTemporaryFile("w", suffix=".merged", delete=False,
+                                     encoding="utf-8") as tmp:
+        tmp.write("\n".join(lines) + "\n")
     return tmp.name
 
 

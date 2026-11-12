@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # extract_acphy_tables_from_descriptor.py
 #
 # Walks the static descriptor arrays acphytbl_info_rev{0,2} found in .rodata

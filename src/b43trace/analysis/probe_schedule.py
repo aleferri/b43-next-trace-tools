@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Probe-phase schedule of a capture, read off its timestamps.
 
 The probe/measure phase at the end of the RXIQ calibration runs to a wall-clock
@@ -24,7 +23,7 @@ past the last group belongs to the tick the phase closed on, which is the
 deadline itself -- the loop in b43_phy_ac_rxiqcal_finalize() checks for it below
 the loop for exactly this case.
 
-  ./probe_schedule.py <capture> [--sh]
+  b43trace probe-schedule <capture> [--sh]
 
 --sh emits `AC_PROBE_TICKS=.. AC_WATCHDOG_TICKS=..`, ready to prefix a command.
 Exit status is 1 when the capture has no probe phase, so a caller can fall back

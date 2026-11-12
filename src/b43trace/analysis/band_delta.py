@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 """What the stock driver writes differently on 2.4 GHz than on 5 GHz.
 
 Takes four segments of the same capture, cut at the same point of the flow
-(split_trace.py --on chanspec, then ops_fold.py fold):
+(b43trace split-trace --on chanspec, then b43trace ops-fold fold):
 
     A5 B5   two 5 GHz channels
     A2 B2   two 2.4 GHz channels
@@ -19,10 +18,11 @@ told from board data. With --port, four traces of the unit harness on the
 same channels say whether the port has it; the last line counts, over the
 deltas both captures share, how many the port reproduces.
 
-    band_delta.py A5 B5 A2 B2 [--also A5 B5 A2 B2] [--port A5 B5 A2 B2]
+    b43trace band-delta A5 B5 A2 B2 [--also A5 B5 A2 B2] [--port A5 B5 A2 B2]
 """
 import argparse
-import tracelib
+
+from b43trace import tracelib
 
 
 def load(path):

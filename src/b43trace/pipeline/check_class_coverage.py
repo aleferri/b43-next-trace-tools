@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Which op classes does a capture actually trace?
 
 The wl-diag tracer gained hooks over time, so captures differ in which classes
@@ -6,10 +5,10 @@ they contain at all. An op absent from a capture that never traced its class
 says nothing about the driver, and treating the two cases alike has already
 produced wrong conclusions -- see router-data/CLASS-COVERAGE.md.
 
-  ./check_class_coverage.py                 audit every capture under router-data
-  ./check_class_coverage.py <file>...        report the given captures
-  ./check_class_coverage.py --require <f>   exit non-zero if f is incomplete
-  ./check_class_coverage.py --conta A,B     per-class counts, one row per capture
+  b43trace check-class-coverage                 audit every capture under router-data
+  b43trace check-class-coverage <file>...        report the given captures
+  b43trace check-class-coverage --require <f>   exit non-zero if f is incomplete
+  b43trace check-class-coverage --conta A,B     per-class counts, one row per capture
 
 The sweeps live in .zip and .tar.gz, and an archive is read as ONE capture:
 counting only the loose .txt leaves out almost everything there is, which is

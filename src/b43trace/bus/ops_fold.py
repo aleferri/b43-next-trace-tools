@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Second pass over a trace decoded by mmio2ops.py.
 
 `fold` rebuilds the accessor-level ops the vendor tracer logs and the bus

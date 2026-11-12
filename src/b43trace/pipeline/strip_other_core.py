@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Toglie da una cattura l'attach dell'altro core wireless.
 
 `wl` al caricamento fa l'attach di *tutti* i core, non solo di quello sotto
@@ -43,7 +42,7 @@ op PHY o radio dopo il reset.
 Le catture in router-data/ non si toccano: questo produce un file derivato,
 come fa trace_filter.py.
 
-Uso: strip_other_core.py <cattura> [out]     (senza out, su stdout)
+Uso: b43trace strip-other-core <cattura> [out]     (senza out, su stdout)
 """
 import re
 import sys

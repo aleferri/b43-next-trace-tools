@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Strip the instrumentation artifacts from a wl-diag trace.
 
 Three filters, each removing one class of thing the tracer records that the
@@ -54,8 +53,8 @@ Both trace formats are accepted -- the vendor capture
 is expressed in episodes.
 
 Usage:
-  trace_filter.py --retvals IN [OUT]        (OUT omitted -> stdout)
-  trace_filter.py --mod-reads --collapse IN OUT
+  b43trace trace-filter --retvals IN [OUT]        (OUT omitted -> stdout)
+  b43trace trace-filter --mod-reads --collapse IN OUT
 """
 import argparse
 import re
@@ -191,6 +190,16 @@ def collapse_tables(lines):
     return kept, removed, total
 
 
+def read_lines(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read().splitlines()
+
+
+def retvals_folded(path):
+    """The lines of the trace at `path` as `--retvals` writes them."""
+    return fold_retvals(read_lines(path))[0]
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__,
@@ -208,8 +217,7 @@ def main():
     if not (a.retvals or a.mod_reads or a.collapse):
         ap.error("pick at least one filter: --retvals, --mod-reads, --collapse")
 
-    lines = open(a.infile, encoding="utf-8",
-                 errors="replace").read().splitlines()
+    lines = read_lines(a.infile)
     notes = []
 
     if a.retvals:

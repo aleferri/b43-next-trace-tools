@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Report a port trace against the capture it reproduces, over a sweep.
 
 Two reports over the same input, answering the two questions one asks of a
@@ -25,8 +24,8 @@ criterion (what the harness cannot emit, with the proof written next to each
 entry). Do not read one as the other.
 
 Usage:
-  sweep_report.py score <vendor> <port> [label]
-  sweep_report.py regdiff <dir>       expects <dir>/<ch>.port and <ch>.vendor
+  b43trace sweep-report score <vendor> <port> [label]
+  b43trace sweep-report regdiff <dir>       expects <dir>/<ch>.port and <ch>.vendor
 """
 import argparse
 import collections
@@ -35,7 +34,7 @@ import os
 import re
 import sys
 
-import tracelib as T
+from b43trace import tracelib as T
 
 # Op classes the port does not implement or the harness does not model. This
 # is a coarse per-class cut, not an ownership argument: see the warning above.

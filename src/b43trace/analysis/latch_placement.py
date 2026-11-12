@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Dove cade il latch della finestra statistiche rispetto alla fase probe.
 
 Il latch e il blocco E stanno fra la cella a 0xffff e la fase probe, oppure
@@ -28,7 +27,7 @@ Sui segmenti che alla fase non arrivano -- i DFS fermi nell'attesa del
 controllo di disponibilita' -- non c'e' nessun tick e la domanda non si pone:
 il tool non stampa niente, che non e' un errore.
 
-  ./latch_placement.py <cattura> [--sh]
+  b43trace latch-placement <cattura> [--sh]
 
 --sh stampa `AC_LATCH_IN_PHASE=1` quando il latch cade dentro la fase, e niente
 quando cade prima, che e' il caso comune e il default dell'harness.
@@ -98,4 +97,5 @@ def main():
                                   else "prima della fase"))
 
 
-main()
+if __name__ == "__main__":
+    main()

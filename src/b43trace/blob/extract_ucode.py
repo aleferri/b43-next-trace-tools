@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Extract a d11 microcode blob from a Broadcom wl object by symbol.
 
 The wl objects carry the per-corerev ucode as global arrays named d11ucodeNN
@@ -6,9 +5,9 @@ The wl objects carry the per-corerev ucode as global arrays named d11ucodeNN
 array straight out of its section at the symbol's offset and size, so the
 output is the exact bytes the driver would upload, big-endian as stored.
 
-    extract_ucode.py WL_OBJECT --rev 42 -o d11ucode42.bin
-    extract_ucode.py WL_OBJECT --symbol d11ucode42 -o out.bin
-    extract_ucode.py WL_OBJECT --list
+    b43trace extract-ucode WL_OBJECT --rev 42 -o d11ucode42.bin
+    b43trace extract-ucode WL_OBJECT --symbol d11ucode42 -o out.bin
+    b43trace extract-ucode WL_OBJECT --list
 
 The blob is derived from a proprietary binary; keep it out of the tree, as
 PROVENANCE.md records for the wl objects themselves. b43 consumes ucode through

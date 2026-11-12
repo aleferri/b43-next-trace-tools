@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Find readback-dependent values the port hardcodes.
 
 Flags registers the vendor *reads* (and consumes, i.e. not a plain
@@ -14,7 +13,7 @@ Both inputs are wl-diag-style traces in the same format
             `./ac_trace switch_channel d6220`
 
 Usage:
-  find_readback_hardcodes.py <vendor_trace> <harness_output> [rmw_window]
+  b43trace find-readback-hardcodes <vendor_trace> <harness_output> [rmw_window]
 
 rmw_window (default 4): how many ops after a read to look for a write-back
 to the same address before calling the read "standalone" (value consumed

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Da dove viene un valore che il driver scrive.
 
 Il problema ricorrente: il port ha una costante cablata da una cattura, il
@@ -23,7 +22,7 @@ non e' una scoperta: e' un fit. Serve che la costante sia la stessa per tutti.
 
 Uso: come modulo, oppure
 
-    trova_sorgente.py --segmenti dir --bersaglio 'REGEX con un gruppo'
+    b43trace trova-sorgente --segmenti dir --bersaglio 'REGEX con un gruppo'
 """
 import argparse
 import collections

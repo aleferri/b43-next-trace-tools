@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "b43-next-trace-tools"
+version = "0.1.0"
+description = "Capture and analysis tools for Broadcom's wl driver and the b43 port"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+elf = ["pyelftools"]
+
+[project.scripts]
+b43trace = "b43trace.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"b43trace.analysis" = ["capture-refs.conf"]

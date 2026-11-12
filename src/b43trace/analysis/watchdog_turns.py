@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """I giri della fase probe su cui il watchdog del vendor non ha latchato.
 
 Il problema che risolve: l'harness emetteva un latch della finestra statistiche
@@ -40,7 +39,7 @@ perche' quelle scritture il vendor le emette da un'altra parte. La lista della
 spazzata resta percio' in `--check`, come misura del residuo, e fuori da
 `--sh`.
 
-  ./watchdog_turns.py <cattura> [--sh] [--check]
+  b43trace watchdog-turns <cattura> [--sh] [--check]
 
 --sh emette `AC_WD_NOLATCH=..`, pronto da mettere davanti a un comando; niente
 se la lista e' vuota.

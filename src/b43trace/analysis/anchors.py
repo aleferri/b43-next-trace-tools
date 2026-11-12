@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The `#NNNN` anchors in the comments: where they land, and whether still so.
 
 An anchor names the index of an op in the capture the sequence was
@@ -45,10 +44,10 @@ And one mode that writes instead of checking:
             unreadable; automatic it would guess.
 
 Usage:
-  anchors.py write   [--remove] [--dry-run] [--conf FILE]
-  anchors.py resolve [--all] [--ref N] [--no-zips]
-  anchors.py class <source.c> <capture.txt> [<capture.txt> ...]
-  anchors.py span <flow>:<board>:<capture>[:VAR=val ...] [...]
+  b43trace anchors write   [--remove] [--dry-run] [--conf FILE]
+  b43trace anchors resolve [--all] [--ref N] [--no-zips]
+  b43trace anchors class <source.c> <capture.txt> [<capture.txt> ...]
+  b43trace anchors span <flow>:<board>:<capture>[:VAR=val ...] [...]
 
 `span` takes several runs because an identified anchor is one contained by
 exactly ONE of them: none means it points at a capture not among these, or is
@@ -65,7 +64,7 @@ import os
 import re
 import sys
 
-import tracelib as T
+from b43trace import tracelib as T
 
 REF = re.compile(r"#(\d{3,7})\b")
 COMMENT_LINE = re.compile(r"^\s*(\*/|\*|/\*|//)")
@@ -595,7 +594,7 @@ def main():
 
     p = sub.add_parser("write", help="generate, update or remove the markers")
     p.add_argument("--conf", default=CONF,
-                   help="the run list (default reverse-tools/capture-refs.conf)")
+                   help="the run list (default: the capture-refs.conf next to this module)")
     p.add_argument("--remove", action="store_true",
                    help="only remove the existing markers, write none")
     p.add_argument("--dry-run", action="store_true",

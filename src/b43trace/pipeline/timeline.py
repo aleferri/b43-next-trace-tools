@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The environment's events after the bring-up, read off a capture.
 
 Once the channel switch is over, what the vendor emits is not the driver's
@@ -36,7 +35,7 @@ does on each event is the driver's, and none of it is in this file.
           that no mask-off follows is a poll of MAC_SUSPENDED, the driver's
           own, not an event.
 
-A capture taken at the MMIO bus (reverse-tools/mmio2ops.py) has none of the
+A capture taken at the MMIO bus (b43trace mmio2ops) has none of the
 accessor classes, so there each marker has its bus form: a maskset is the read
 of the register followed by the write, the mode change is the write of 0x0520
 that changes only bits 0x000c of the read before it; the host-flag clear is
@@ -69,7 +68,7 @@ cannot know them otherwise:
                 events, so this also says that its turn counter advances once
                 over the two, which is what keeps the region dump in phase.
 
-  ./timeline.py <capture> <outfile>
+  b43trace timeline <capture> <outfile>
 
 prints `AC_TIMELINE=<outfile> AC_WD_PHASE=<n> AC_BEACON_RELOADS=<pre>
 AC_WD_ENTRY_TURN=<0|1>` for the caller's environment.
@@ -87,8 +86,13 @@ def match(op, rest, name, addr):
 
 
 def load(path):
+    with open(path, errors="replace") as f:
+        return parse(f)
+
+
+def parse(lines):
     ops = []
-    for line in open(path, errors="replace"):
+    for line in lines:
         m = OP.match(line)
         if m:
             ops.append((float(m.group(1)), int(m.group(2)),

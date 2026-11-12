@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """RX-IQ solve points from the sweeps, and the score of the solver on them.
 
 A point is one write of PHY 0x?a0/0x?a1 with a non-zero value, paired with the
@@ -17,8 +16,8 @@ b43_phy_ac_iq_solve() in b43/phy_ac.c. The CORDIC table is the one of
 lib/math/cordic.c.
 
 Usage:
-    python3 rxiq_points.py extract SEG.txt... > points.json
-    python3 rxiq_points.py score points.json [--verbose]
+    b43trace rxiq-points extract SEG.txt... > points.json
+    b43trace rxiq-points score points.json [--verbose]
 
 The segments are the raw ones from cold-sweep.zip / hot-sweep.zip; they are
 folded with trace_filter.py here.
@@ -28,21 +27,13 @@ import json
 import math
 import os
 import re
-import subprocess
 import sys
 from collections import Counter
 
+from b43trace.pipeline import trace_filter
+
 RE = re.compile(r'#(\d+)\s+cpu\d\s+(PHY\.(?:RD|WR|MOD))\s+addr=0x([0-9a-f]+)'
                 r'\s+val=0x([0-9a-f]+)')
-HERE = os.path.dirname(os.path.abspath(__file__))
-
-
-def fold(path):
-    out = '/tmp/rxiq_points_fold.txt'
-    subprocess.run([sys.executable, os.path.join(HERE, 'trace_filter.py'),
-                    '--retvals', path, out], check=True, capture_output=True)
-    return out
-
 
 def extract(seg, path):
     pts = []
@@ -50,7 +41,7 @@ def extract(seg, path):
     rounds = {c: [] for c in range(3)}
     search = {c: False for c in range(3)}
     a_val = {}
-    for line in open(fold(path)):
+    for line in trace_filter.retvals_folded(path):
         m = RE.search(line)
         if not m:
             continue

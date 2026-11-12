@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The d11 AC RX header as the stock driver receives it, read the way b43
 reads it, so a capture of the stock driver checks b43's RX path field by
 field.
@@ -12,7 +11,7 @@ bits 1:0, then the 802.11 header. What the stock driver puts in +24..+39 is
 printed raw.
 """
 
-from d11ac_txh import FT, plcp_text, u16
+from b43trace.d11.ac_txh import FT, plcp_text, u16
 
 HDR_LEN = 40
 MAC_FLAGS = ((0x00000001, "fcserr"), (0x00000002, "resp"),

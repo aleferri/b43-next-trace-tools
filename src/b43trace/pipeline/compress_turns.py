@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Shorten a cold segment by removing whole blocks of steady watchdog turns.
 
 The weather-radar segments of a sweep run for ten minutes and more, most of
@@ -23,17 +22,15 @@ and ARGX continuation lines, and the timestamps after it are shifted back by
 its length, so the timeline the harness replays has no hole.
 
 Usage:
-    compress_turns.py <segment.txt> <out.txt> [--keep 60]
+    b43trace compress-turns <segment.txt> <out.txt> [--keep 60]
 The input is a raw or folded segment; the output has the same form.
 """
 import argparse
-import os
 import re
-import subprocess
 import sys
-import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+from b43trace.pipeline import timeline, trace_filter
+
 BLOCK = 60
 
 LINE = re.compile(r"^(\s*)([\d.]+)(\s+#(\d+)\s.*)$")
@@ -41,20 +38,11 @@ PARENT = re.compile(r"\b(?:RETVAL|ARGX)\s+for=#(\d+)")
 
 
 def timeline_events(path):
-    """[(t, ep, kind)] from timeline.py, run on a folded copy."""
-    with tempfile.TemporaryDirectory() as d:
-        folded = os.path.join(d, "folded")
-        tl = os.path.join(d, "timeline")
-        subprocess.run([sys.executable, os.path.join(HERE, "trace_filter.py"),
-                        "--retvals", path, folded],
-                       check=True, capture_output=True)
-        subprocess.run([sys.executable, os.path.join(HERE, "timeline.py"),
-                        folded, tl], check=True, capture_output=True)
-        ev = []
-        for l in open(tl):
-            t, ep, kind = l.split()[:3]
-            ev.append((float(t), int(ep), kind))
-        return ev
+    """[(t, ep, kind)] from the timeline of a folded copy."""
+    ev = timeline.events(timeline.parse(trace_filter.retvals_folded(path)))[0]
+    if not ev:
+        raise RuntimeError(f"{path}: no timeline events")
+    return ev
 
 
 def plan(events, keep):

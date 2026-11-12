@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Which port phases the vendor does not execute above a threshold.
 
 This is what decides what to gate: above 5250 MHz the stock driver skips some
@@ -34,7 +33,7 @@ The port trace must be produced with AC_FN_MARKERS=1; passing `flow:board`
 instead runs it.
 
 Usage:
-  phase_absent.py <port|flow:board> <vendor-below> <vendor-above>
+  b43trace phase-absent <port|flow:board> <vendor-below> <vendor-above>
                   [--witness-only] [--min N] [--fn NAME] [--tables]
 """
 import argparse
@@ -43,7 +42,7 @@ import os
 import re
 import sys
 
-import tracelib as T
+from b43trace import tracelib as T
 
 # Ports and gates every phase goes through: always present, so they say
 # nothing about a phase being absent. The addresses are in tracelib's

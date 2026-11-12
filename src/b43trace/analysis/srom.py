@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Which of the values the driver writes are board data, not code.
 
 A value transcribed from a capture and a value derived from the SROM look
@@ -54,9 +53,9 @@ which stopped resolving when the attach captures were replaced by the sweep
 archives. Any capture works, including a segment out of an archive.
 
 Usage:
-  srom.py literals  [--nvram FILE] [--min-uses N] [--canonical bcmsrom_tbl.h]
-  srom.py correlate A.txt B.txt [--nvram-a F] [--nvram-b F] [--label TEXT]
-  srom.py verify    NVRAM CAPTURE [CAPTURE ...] [--freq 5180]
+  b43trace srom literals  [--nvram FILE] [--min-uses N] [--canonical bcmsrom_tbl.h]
+  b43trace srom correlate A.txt B.txt [--nvram-a F] [--nvram-b F] [--label TEXT]
+  b43trace srom verify    NVRAM CAPTURE [CAPTURE ...] [--freq 5180]
 """
 import argparse
 import collections
@@ -65,7 +64,7 @@ import os
 import re
 import sys
 
-import tracelib as T
+from b43trace import tracelib as T
 
 NV_RE = re.compile(r"^([a-z0-9_]+)=(.+)$")
 

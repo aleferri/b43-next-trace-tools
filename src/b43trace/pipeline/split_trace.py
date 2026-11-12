@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Cut a decoded trace into one segment per configuration.
 
 The boundary and the label are two distinct things and come from different
@@ -47,10 +46,10 @@ code: renaming them would break the reproduction of a published split and the
 default segment names in test/unit/gates.sh.
 
 Usage:
-  split_trace.py --on mark     trace.txt dir/ [--prefix cold] [--bringup-only]
-  split_trace.py --on mod      trace.txt dir/ [--prefix cold] [--bringup-only]
-  split_trace.py --on chanspec trace.txt dir/
-  split_trace.py --on gaps     trace.txt dir/ [--gap 1.03] [--channels 36,40]
+  b43trace split-trace --on mark     trace.txt dir/ [--prefix cold] [--bringup-only]
+  b43trace split-trace --on mod      trace.txt dir/ [--prefix cold] [--bringup-only]
+  b43trace split-trace --on chanspec trace.txt dir/
+  b43trace split-trace --on gaps     trace.txt dir/ [--gap 1.03] [--channels 36,40]
 """
 import argparse
 import bisect

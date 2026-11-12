@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
 # Decoder of the wl_mmio_trap records (MIPS big-endian, 28 bytes per record).
 #
 # Typical use, in a pipe like the wl-diag decoder (the device does:
 # cat /proc/wl_mmio_trap | nc -u host 5555):
-#     nc -u -l -p 5555 | ./decode-wl-mmio.py
+#     nc -u -l -p 5555 | b43trace decode-wl-mmio
 # or from a file:
-#     ./decode-wl-mmio.py < capture.bin
-#     ./decode-wl-mmio.py capture.bin
+#     b43trace decode-wl-mmio < capture.bin
+#     b43trace decode-wl-mmio capture.bin
 #
 # Framing: it is a byte stream, read in blocks and consumed 28 bytes at a
 # time. The same record layout as wl_diag's -- ts_ns, seq, addr, val, aux,
@@ -33,12 +32,12 @@
 # flags (23:16) and the buffer bytes (15:0); the DATA records that follow,
 # 12 bytes each, carry the 16 bytes of the descriptor as they are in memory
 # and then those of the buffer. The d11 AC TX header is read by
-# ../reverse-tools/d11ac_txh.py, the same one decode-wl-diag.py uses.
-import os, sys, struct, argparse
+# b43trace.d11.ac_txh, the same one decode_wl_diag uses.
+import argparse
+import struct
+import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "reverse-tools"))
-import d11ac_txh
+from b43trace.d11 import ac_txh
 
 REC = struct.Struct(">QIIIIBBH")   # ts_ns, seq, addr, val, aux, op, cpu, _pad
 SZ = REC.size                       # 28
@@ -69,11 +68,11 @@ def dd_lines(chan, slot, bufaddr, flags, raw, buf, hexdump):
            + (f" [{','.join(fl)}]" if fl else "")]
     if not buf:
         return out
-    txh = d11ac_txh.describe(buf, bc)
+    txh = ac_txh.describe(buf, bc)
     if hexdump or txh is None:
         if txh is None:
             out.append("  layout non riconosciuto:")
-        out += ["  " + line for line in d11ac_txh.hexdump(buf)]
+        out += ["  " + line for line in ac_txh.hexdump(buf)]
     if txh:
         out += ["  " + line for line in txh]
     return out

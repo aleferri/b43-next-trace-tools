@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """A beacon or probe response template as written to template RAM.
 
 What sits in front of the 802.11 frame (PLCP, and whatever header the

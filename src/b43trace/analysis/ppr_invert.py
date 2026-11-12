@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Invert the PPR chain on a segment, under either model of the maximum.
 
 The chain is the same in both models:
@@ -28,7 +27,7 @@ are two readings of what the vendor's reference level is, and which one holds
 is what the data has to decide. Running both on the same segment is the point.
 
 Usage:
-  ppr_invert.py --maxp N --po 0xNNNNN --fields a,b,c,d,e,f,g,h [--model both]
+  b43trace ppr-invert --maxp N --po 0xNNNNN --fields a,b,c,d,e,f,g,h [--model both]
 """
 import argparse
 import collections

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Trova i siti di chiamata in un modulo MIPS PIC (-mabicalls).
 
 In un modulo del kernel MIPS non ci sono `jal`: le chiamate materializzano
@@ -15,7 +14,7 @@ Per patchare un sito servono tre verifiche, perche' la coppia da sola non basta:
   3. il registro del `jalr` deve essere quello caricato dalla coppia, non un
      altro rimasto in giro.
 
-Uso: callsites_pic.py file.o simbolo [simbolo ...]
+Uso: b43trace callsites-pic file.o simbolo [simbolo ...]
 """
 import bisect
 import re

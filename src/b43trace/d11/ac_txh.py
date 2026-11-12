@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """The d11 AC TX header as the stock driver hands it to DMA.
 
 Both tracers record it: wl-mmio-trap from memory at a TX index write,

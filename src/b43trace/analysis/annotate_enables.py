@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Annota una cattura wl-diag riga per riga con lo stato corrente degli
 enable, ognuno marcato con l'#op che l'ha impostato per ultimo:
 
@@ -11,7 +10,7 @@ enable, ognuno marcato con l'#op che l'ha impostato per ultimo:
   RCAL  RAD 0x8ea (RCCAL_EN1) bit 0x0080 (gate cal)       -> RCAL=0/1
   GPIO  GPIO.OUT pin2 (0x4) e pin10 (0x400)               -> GPIO=2A / 2- / -A / --
 
-Uso: annotate_enables.py <cattura.txt> [out.txt]
+Uso: b43trace annotate-enables <cattura.txt> [out.txt]
 Il sommario delle transizioni va su stderr. '?' = mai toccato finora.
 """
 import re

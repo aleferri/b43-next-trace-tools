@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Compare the core state in which two traces touch the PHY and radio, and the
 waits they make.
 
@@ -24,7 +23,7 @@ It also lists the waits: runs of two or more consecutive reads of the same
 register, with the write that precedes the run, and whether the other trace
 waits on that register at all.
 
-    access_conditions.py WL B43 [--wl-from PAT] [--wl-to PAT]
+    b43trace access-conditions WL B43 [--wl-from PAT] [--wl-to PAT]
                                 [--b43-from PAT] [--b43-to PAT]
 
 The windows are given by the first line containing PAT (default: the whole

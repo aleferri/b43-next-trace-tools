@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
 # Decoder of the wl_diag records (MIPS big-endian, 28 bytes per record).
 #
 # Typical use (the device does: cat /proc/wl_diag | nc <HOST> 5555, over TCP):
-#     ncat -l 5555 | python3 decode-wl-diag.py
+#     ncat -l 5555 | b43trace decode-wl-diag
 # or from a file:
-#     python3 decode-wl-diag.py < dump.bin
-#     python3 decode-wl-diag.py --txs-714 < dump.bin   TX statuses of 7.14.89
+#     b43trace decode-wl-diag < dump.bin
+#     b43trace decode-wl-diag --txs-714 < dump.bin   TX statuses of 7.14.89
 #
 # Framing: it is a byte stream, read in blocks of 28; a record split between
 # two reads stays in the buffer until the next one.
@@ -58,16 +57,16 @@
 # follow (val) and in aux 1 for a raw buffer, 2 for a tagged nbuff pointer
 # that was not read; the TX.DATA records, right
 # after it, carry the bytes, twelve per record packed like MARK. The d11 AC TX
-# header is read by ../reverse-tools/d11ac_txh.py, the same one
-# decode-wl-mmio.py uses; a layout that does not add up is printed in hex.
+# header is read by b43trace.d11.ac_txh, the same one
+# decode_wl_mmio uses; a layout that does not add up is printed in hex.
 # TPL.RAMW (31) + TPL.DATA (57): with tpldump set, aux of a TPL.RAMW is the
 # number of bytes of the write that follow in TPL.DATA records, packed the
 # same way. The TPL.RAMW line stays as it is; the content follows it,
-# indented, read by ../reverse-tools/d11_template.py when it holds a beacon
+# indented, read by b43trace.d11.template when it holds a beacon
 # or a probe response, in hex otherwise.
 # RX.PKT (58) + RX.DATA (59): a received frame at the entry of wlc_recv, the
 # same shape as TX.PKT. The RX header is read by
-# ../reverse-tools/d11ac_rxh.py as b43_rx() reads it.
+# b43trace.d11.ac_rxh as b43_rx() reads it.
 # TXS (65) + TXS.DATA (66): a TX status at the entry of wlc_dotxstatus, a2
 # in addr, the bytes of the tx_status structure that follow in val, packed
 # like TX.DATA. The structure is printed raw, in the driver's byte order,
@@ -78,13 +77,10 @@
 # half of XMITSTAT_0 at +32, XMITSTAT_2/3 at +34/+38, the second package at
 # +42..+57, XMITSTAT_1 in a2), in b43_txstatus_dump()'s format and with
 # b43_txstatus_read_ac()'s reading.
-import os, sys, struct
+import struct
+import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "reverse-tools"))
-import d11ac_txh
-import d11_template
-import d11ac_rxh
+from b43trace.d11 import ac_rxh, ac_txh, template
 
 REC = struct.Struct(">QIIIIBBH")   # ts_ns, seq, addr, val, aux, op, cpu, _pad
 SZ = REC.size                       # 28
@@ -132,7 +128,7 @@ OBJ      = {24, 25}
 # read with a RETVAL: it does not go in READS, or compare.py would see it as
 # val=UNDEFINED, a wildcard that matches anything. The SELECTOR is the 5th
 # argument and arrives in an ARGX record as a5: after
-# `trace_filter.py --retvals` the line carries it at the end.
+# `b43trace trace-filter --retvals` the line carries it at the end.
 OBJ_BULK = {41, 42}
 # Address match: the record carries the index (a1) only. AMT.WR also a3.
 ADDRMATCH = {43, 44, 45}
@@ -219,7 +215,7 @@ def txs_714(data, a2):
 
 def txs_lines(data, a2):
     """The tx_status in hex and where a posted frame's ID sits in it."""
-    lines = d11ac_txh.hexdump(data)
+    lines = ac_txh.hexdump(data)
     if TXS_714:
         lines += txs_714(data, a2) or ["troppo corto per il layout 7.14.89"]
     for o in range(0, len(data) - 1, 2):
@@ -247,7 +243,7 @@ def print_group(g):
             print(" " * 17 + line)
         return
     if g["op"] == TX_PKT and len(data) == g["need"]:
-        fid = d11ac_txh.frame_id(data, g["addr"])
+        fid = ac_txh.frame_id(data, g["addr"])
         if fid is not None:
             posted.pop(fid, None)
             posted[fid] = g["seq"]
@@ -258,14 +254,14 @@ def print_group(g):
                "nbuff-tagged, not read" if g["aux"] & 2 else "pkt")
         name = "TX.PKT" if g["op"] == TX_PKT else "RX.PKT"
         first = f"{name:<8} {src} len={g['addr']} bytes={g['need']}"
-        describe = (d11ac_txh.describe if g["op"] == TX_PKT
-                    else d11ac_rxh.describe)
-        dump = d11ac_txh.hexdump
+        describe = (ac_txh.describe if g["op"] == TX_PKT
+                    else ac_rxh.describe)
+        dump = ac_txh.hexdump
         args = (data, g["addr"])
     else:
         first = (f"{'TPL.RAMW':<8} addr={h(g['addr'], False)} "
                  f"val={h(g['val'], False)}")
-        describe, dump = d11_template.describe, d11_template.hexdump
+        describe, dump = template.describe, template.hexdump
         args = (data,)
     lines = [first]
     if len(data) < g["need"]:

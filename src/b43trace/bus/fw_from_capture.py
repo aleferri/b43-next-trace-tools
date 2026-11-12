@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Rebuild the firmware b43 loads from a bus capture of wl's `up`.
 
 A bus capture of the stock driver's bring-up holds everything b43 takes from
@@ -17,7 +16,7 @@ The output is a directory b43 can load from (`b43_fw_header` + payload, the
 names the AC port requests) and the raw big-endian ucode the d11 simulator
 and the b43-tools interpreter take:
 
-    fw_from_capture.py router-data/vd625-agcombo/ch36.bin -o /tmp/fw-agcombo
+    b43trace fw-from-capture router-data/vd625-agcombo/ch36.bin -o /tmp/fw-agcombo
 
 The files are derived from a proprietary driver; keep them out of the tree.
 """
@@ -26,8 +25,7 @@ import os
 import struct
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import mmio2ops  # noqa: E402
+from b43trace.bus import mmio2ops
 
 D11_LIMIT = 0x1000
 OBJADDR, OBJDATA = 0x160, 0x164

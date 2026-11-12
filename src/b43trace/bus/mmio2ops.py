@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Decode a bus-level capture of a PCIe BCMA wireless chip into op classes.
 
 Five capture formats, the same device traffic:

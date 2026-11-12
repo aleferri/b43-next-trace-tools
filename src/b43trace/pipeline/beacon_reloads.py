@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Beacon-reload schedule of a capture, read off its timestamps.
 
 Every so often the stack above the driver republishes the beacon, and the
@@ -21,11 +20,11 @@ anchored to b43_op_config() and the three of the conf_tx passes carry no
 mac_suspend between the length and the template; the later ones do, and that is
 what this looks for.
 
-Placement reuses probe_schedule.py's tick grid, so a reload lands on the tick of
+Placement reuses probe_schedule's tick grid, so a reload lands on the tick of
 the probe group that follows it. Reloads before the phase starts are counted
 separately: they run before the loop, not on a tick of it.
 
-  ./beacon_reloads.py <capture> [--sh]
+  b43trace beacon-reloads <capture> [--sh]
 
 --sh emits `AC_BEACON_RELOADS=<pre>:<tick>,<tick>,..`, ready to prefix a
 command. Exit status is 1 when the capture has no probe phase,
@@ -33,17 +32,11 @@ since without the grid there is nothing to place the reloads on.
 """
 
 import argparse
-import importlib.util
-import os
 import re
 import statistics
 import sys
 
-_HERE = os.path.dirname(os.path.abspath(__file__))
-_spec = importlib.util.spec_from_file_location(
-    "probe_schedule", os.path.join(_HERE, "probe_schedule.py"))
-probe_schedule = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(probe_schedule)
+from b43trace.analysis import probe_schedule
 
 OP = re.compile(r"^\s*([\d.]+)\s+#(\d+)\s+cpu\d+\s+(.*?)\s*$")
 TIMBPOS = re.compile(r"^OBJ\.WR\s+addr=0x001e\s+val=0x[0-9a-f]+(?: |$)")

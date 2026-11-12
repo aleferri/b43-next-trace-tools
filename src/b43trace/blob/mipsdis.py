@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Disassemblatore MIPS32 big-endian minimo, per ricavare le FIRME degli hook.
 
 Serve a una cosa sola, ed e' la cosa per cui un hook si puo' scrivere: sapere
@@ -27,8 +26,8 @@ Due cose da sapere per leggere l'uscita:
   coperta si vede invece di essere decodificata male.
 
 Uso:
-    mipsdis.py <oggetto> <indirizzo> <byte> [sezione]
-    mipsdis.py <oggetto> --prologo <simbolo>[,<simbolo>...]
+    b43trace mipsdis <oggetto> <indirizzo> <byte> [sezione]
+    b43trace mipsdis <oggetto> --prologo <simbolo>[,<simbolo>...]
 
 `--prologo` stampa le prime otto istruzioni di ciascun simbolo e dice se c'e'
 un branch nella finestra delle prime quattro parole, che e' cio' che decide fra

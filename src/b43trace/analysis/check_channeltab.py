@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Check the radio-2069 channel table against the vendor sweep segments.
 
 The table carries a row per channel, and a sweep holds one cycle per
@@ -17,7 +16,7 @@ A row that matches means tuning that channel would emit the vendor's own
 per-channel values; it says nothing about the constants that are still
 transcribed from ch36 elsewhere in the flow.
 
-  ./check_channeltab.py <segment-dir>
+  b43trace check-channeltab <segment-dir>
 """
 
 import glob

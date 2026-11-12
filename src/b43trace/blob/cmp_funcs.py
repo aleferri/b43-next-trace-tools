@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Compare the function bodies of two or more MIPS32 ELF builds of wl.
 
 Two levels of sameness, and the second one is the point of the tool:
@@ -19,8 +18,8 @@ whether two builds are the same driver at all before the bodies are worth
 comparing.
 
 Usage:
-  cmp_funcs.py A.o B.o [--filter substring]
-  cmp_funcs.py label=A.o label=B.o label=C.o [...] [--filter substring]
+  b43trace cmp-funcs A.o B.o [--filter substring]
+  b43trace cmp-funcs label=A.o label=B.o label=C.o [...] [--filter substring]
 """
 import argparse
 import itertools

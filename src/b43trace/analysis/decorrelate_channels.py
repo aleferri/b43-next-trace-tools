@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """Decorrela le scritture rispetto a canale e larghezza, su N segmenti.
 
-Prende i segmenti prodotti da `split_trace.py --on chanspec` (o --on gaps),
+Prende i segmenti prodotti da `b43trace split-trace --on chanspec` (o --on gaps),
 ognuno etichettato con
 (canale, larghezza), e per ogni chiave (op, addr) confronta la SEQUENZA di
 valori scritti fra segmenti. Classifica in:
@@ -21,8 +20,8 @@ Il confronto e' sulla sequenza, non sull'insieme: lo stesso registro scritto due
 volte con valori diversi in ordine diverso e' una differenza.
 
 Uso:
-  decorrelate_channels.py --seg dir/seg00-ch36.txt=36,20 [--seg ...] [--csv out.csv]
-  decorrelate_channels.py --fase dir=20:36,40,44 [--fase dir2=40:36,44]
+  b43trace decorrelate-channels --seg dir/seg00-ch36.txt=36,20 [--seg ...] [--csv out.csv]
+  b43trace decorrelate-channels --fase dir=20:36,40,44 [--fase dir2=40:36,44]
 """
 import argparse
 import collections

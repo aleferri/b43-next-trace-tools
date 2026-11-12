@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """gen_syms.py - costruisce la riga insmod di wl-diag da un dump di
 /proc/kallsyms copiato dal device, e dice quali hook si risolveranno.
 
@@ -8,7 +7,7 @@ lo si macina qui sul PC.
 
 Uso:
     ssh ... "cat /proc/kallsyms" > kallsyms-dsl.txt
-    ./gen_syms.py kallsyms-dsl.txt
+    b43trace gen-syms kallsyms-dsl.txt
 
 Stampa la riga con `klookup=<indirizzo di kallsyms_lookup_name>`, che e' l'unica
 strada: il modulo risolve gli altri simboli da se', e li RIRISOLVE a ogni

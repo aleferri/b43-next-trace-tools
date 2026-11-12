@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Controllo lessicale minimo su un file C, senza compilatore.
 
 Prende la classe di errori che si fanno editando commenti a mano e che il
@@ -16,7 +15,7 @@ compilatore segnala in modo confuso, tipicamente decine di righe dopo la causa:
 Non e' un parser: e' un tokenizzatore che salta commenti e letterali
 correttamente e conta il resto.
 
-Uso: csanity.py file.c [file.c ...]      exit 1 se trova qualcosa
+Uso: b43trace csanity file.c [file.c ...]      exit 1 se trova qualcosa
 """
 import re
 import signal
