@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""The environment's events after the bring-up, read off a capture.
+
+Once the channel switch is over, what the vendor emits is not the driver's
+flow but its reaction to things that happen to it: a timer fires, the stack
+loads a template, the AP comes up, the radio goes down. On hardware those come
+from the kernel and mac80211; the trace harness has neither, so it replays
+them from the capture, each at the instant the capture has it. What the driver
+does on each event is the driver's, and none of it is in this file.
+
+  WD      a turn of the 1 s watchdog. Marker: the mode change PHY.MOD 0x0520
+          mask=0xc, one per turn and none without, at the same instant as the
+          turn's head 0x07af. The first turn after the switch has neither --
+          it only reads the statistics window -- and its marker is the first
+          head word of that read, OBJ.RD 0x010e after the host-flag clear.
+  POLL    a turn of the 150 ms radar-detector timer: PHY.RD 0x0251. The one
+          glued to the arm is the driver's own and is not an event.
+  NOISE   the noise sample completion, which the core delivers from its
+          tasklet. Marker: the read of 0x008c that opens the window latch.
+
+  TPL     a beacon template reload by the core (mac80211's bss_info_changed):
+          the length write in BTL0/BTL1 followed by a mac_suspend, which is
+          what tells these from the ones inside the BSS configuration. Only
+          the reloads after the first watchdog turn are events; the ones
+          before it sit inside the bring-up tail and the count comes out as
+          AC_BEACON_RELOADS.
+  BSS_UP  the AP is up after the channel availability check: the first write
+          of the BSS row of the address match table with its flags, AMT.WR
+          idx=0x3f a3!=0, after the arm.
+  IRQ     an interrupt from the microcode, bus captures only: the read of
+          GEN_IRQ_REASON (0x0128) that the interrupt handler follows within
+          a few operations with the mask-off write GEN_IRQ_MASK (0x012c) = 0.
+          Carries two words: the reason read, and the DMA channel 0 status
+          the handler acknowledges before it restores the mask (the write of
+          0x0020, 0x00010000 for a received frame), or 0. A read of 0x0128
+          that no mask-off follows is a poll of MAC_SUSPENDED, the driver's
+          own, not an event.
+
+A capture taken at the MMIO bus (reverse-tools/mmio2ops.py) has none of the
+accessor classes, so there each marker has its bus form: a maskset is the read
+of the register followed by the write, the mode change is the write of 0x0520
+that changes only bits 0x000c of the read before it; the host-flag clear is
+the write of the flags word 0x005e with bit 0x4000 clear; the BSS row of the
+address match table is the write of its second word, OBJ.WR sel=0x40000
+addr=0x7f, with flags in the upper half; the mac_suspend after a template
+length is the next MACCTL write with bit 0 clear, or the MACCMD write that
+commits it; the region dump is the run
+of reads that starts at 0x00e0. Which set applies is read off the capture:
+one with REG.* or WRAP.* operations is a bus capture.
+
+Lines are `<t> <op#> <kind> [<arg>...]`, sorted by time; only IRQ has
+arguments. Two things about the driver's
+state at the start of the flow come out of the same pass, because the harness
+cannot know them otherwise:
+
+  AC_WD_PHASE   the value of the watchdog's turn counter, mod 30, at the first
+                turn of the segment. The measure block (every temps_period
+                turns, 10 when unprogrammed) and the region dump (every 30) are
+                periodic on that counter since the driver came up; on a cold
+                attach the measure lands on the last turn of its first period,
+                on a hot cycle wherever the period happens to be. Read off the
+                first dump, or the measure blocks when the segment has no dump.
+
+  AC_WD_ENTRY_TURN
+                whether the first turn of the segment carries the full shape
+                -- head, peek and mode change in one callback -- instead of
+                the bare statistics poll. Read off the order of the four
+                scattered head cells. The driver splits that callback over two
+                events, so this also says that its turn counter advances once
+                over the two, which is what keeps the region dump in phase.
+
+  ./timeline.py <capture> <outfile>
+
+prints `AC_TIMELINE=<outfile> AC_WD_PHASE=<n> AC_BEACON_RELOADS=<pre>
+AC_WD_ENTRY_TURN=<0|1>` for the caller's environment.
+A capture with no watchdog turn produces an empty file and exit status 1.
+"""
+
+import argparse
+import re
+
+OP = re.compile(r"^\s*([\d.]+)\s+#(\d+)\s+cpu\d+\s+(\S+)\s+(.*)$")
+
+
+def match(op, rest, name, addr):
+    return op == name and re.match(r"^addr=0x0*%x\b" % addr, rest) is not None
+
+
+def load(path):
+    ops = []
+    for line in open(path, errors="replace"):
+        m = OP.match(line)
+        if m:
+            ops.append((float(m.group(1)), int(m.group(2)),
+                        m.group(3), m.group(4)))
+    return ops
+
+
+def val(rest):
+    m = re.search(r"\bval=0x([0-9a-fA-F]+)", rest)
+    return int(m.group(1), 16) if m else None
+
+
+def at(ops, i, name, addr):
+    return 0 <= i < len(ops) and match(ops[i][2], ops[i][3], name, addr)
+
+
+class AccessorMarkers:
+    """The markers in the vocabulary of the wl-diag hooks."""
+
+    @staticmethod
+    def wd(ops, i):
+        _, _, op, rest = ops[i]
+        return (op == "PHY.MOD" and
+                re.match(r"^addr=0x0*520\b.*\bmask=0x0*c\b", rest) is not None)
+
+    @staticmethod
+    def mhf_clear(ops, i):
+        _, _, op, rest = ops[i]
+        return op == "MAC.MHF" and re.search(r"\bmask=0x0*4000\b", rest) is not None
+
+    @staticmethod
+    def arm(ops, i):
+        _, _, op, rest = ops[i]
+        return (op == "PHY.MOD" and
+                re.match(r"^addr=0x0*2e4 val=0x0*f00\b", rest) is not None)
+
+    @staticmethod
+    def bss_row(ops, i):
+        _, _, op, rest = ops[i]
+        return (op == "AMT.WR" and re.match(r"^idx=0x0*3f\b", rest) is not None
+                and re.search(r"\ba3=0x0*[1-9a-f]", rest) is not None)
+
+    @staticmethod
+    def amt(ops, i):
+        return ops[i][2] == "AMT.WR"
+
+    @staticmethod
+    def suspend_after(ops, i):
+        return (i + 1 < len(ops) and ops[i + 1][2] == "MAC.MCTRL" and
+                ops[i + 1][3].startswith("val=0x00000000 mask=0x00000001"))
+
+    @staticmethod
+    def dump(ops, i):
+        _, _, op, rest = ops[i]
+        return (op == "OBJ.BULKR" and
+                re.match(r"^addr=0x0*e0 len=128\b", rest) is not None)
+
+
+class BusMarkers:
+    """The same markers as a capture at the MMIO bus shows them."""
+
+    @staticmethod
+    def wd(ops, i):
+        # The read of the maskset is the PHY access before the write; the
+        # interrupt handler can land in between with its MAC registers.
+        if not at(ops, i, "PHY.WR", 0x520):
+            return False
+        j = i - 1
+        while j >= 0 and not ops[j][2].startswith(("PHY.", "RAD.")):
+            j -= 1
+        return (at(ops, j, "PHY.RD", 0x520) and
+                (val(ops[i][3]) ^ val(ops[j][3])) & ~0xc == 0)
+
+    @staticmethod
+    def mhf_clear(ops, i):
+        return at(ops, i, "OBJ.WR", 0x5e) and not val(ops[i][3]) & 0x4000
+
+    @staticmethod
+    def arm(ops, i):
+        return at(ops, i, "PHY.WR", 0x2e4) and val(ops[i][3]) & 0x3f00 == 0x0f00
+
+    @staticmethod
+    def bss_row(ops, i):
+        _, _, op, rest = ops[i]
+        return (at(ops, i, "OBJ.WR", 0x7f) and "sel=0x40000" in rest
+                and val(rest) >> 16 != 0)
+
+    @staticmethod
+    def amt(ops, i):
+        return ops[i][2].startswith("OBJ.") and "sel=0x40000" in ops[i][3]
+
+    @staticmethod
+    def suspend_after(ops, i):
+        # The 7.14.43 driver commits the template with MACCMD (beacon valid
+        # bits) and no mac_suspend, after a read of MACCMD.
+        for j in range(i + 1, min(i + 4, len(ops))):
+            if ops[j][2] == "MAC.MCMD":
+                return True
+            if ops[j][2] == "MAC.MCTRL":
+                return not val(ops[j][3]) & 1
+        return False
+
+    @staticmethod
+    def dump(ops, i):
+        return at(ops, i, "OBJ.RD", 0xe0) and at(ops, i + 1, "OBJ.RD", 0xe2)
+
+
+def markers_for(ops):
+    bus = any(op.startswith(("REG.", "WRAP.")) for _, _, op, _ in ops)
+    return BusMarkers if bus else AccessorMarkers
+
+
+def events(ops):
+    mk = markers_for(ops)
+    turns = [i for i in range(len(ops)) if mk.wd(ops, i)]
+    if not turns:
+        return [], 0, 0, False
+
+    # The host-flag clear that ends the channel switch. The first turn after
+    # it reads the statistics window without latching it and carries no
+    # sampling phase, so its marker is the first head word of the poll. A
+    # capture that starts on a running interface has turns before any
+    # switch, and its first turn is an ordinary one.
+    clears = [i for i in range(turns[0]) if mk.mhf_clear(ops, i)]
+    mhf = clears[-1] if clears else 0
+    first = next((i for i in range(mhf, turns[0])
+                  if match(ops[i][2], ops[i][3], "OBJ.RD", 0x10e)), None) \
+        if clears else None
+    if first is None:
+        first = turns[0]
+    else:
+        turns = [first] + turns
+
+    # The four scattered cells that head the poll come in one of two orders:
+    # 0x010e 0x010c 0x0158 0x015e entering the phase, 0x010e 0x0158 0x010c
+    # 0x015e in steady state. The entry order on that first turn means the
+    # turn carries the full shape -- head, peek and the mode change -- in one
+    # callback, which the driver splits over two events and which therefore
+    # advances its turn counter once, not twice.
+    head = []
+    for i in range(first, min(first + 12, len(ops))):
+        if ops[i][2] != "OBJ.RD":
+            continue
+        v = int(re.match(r"^addr=0x0*([0-9a-f]+)\b", ops[i][3]).group(1), 16)
+        if v in (0x10e, 0x10c, 0x158, 0x15e):
+            head.append(v)
+        if len(head) == 4:
+            break
+    entry = head == [0x10e, 0x10c, 0x158, 0x15e]
+
+    out = [(ops[i][0], ops[i][1], "WD") for i in turns]
+    t_first = ops[first][0]
+
+    # The arm is the last maskset of 0x02e4 that a detector poll follows within
+    # a few operations; the earlier ones belong to the radio bring-up.
+    arm = None
+    for i in range(len(ops)):
+        if (mk.arm(ops, i)
+                and any(match(ops[j][2], ops[j][3], "PHY.RD", 0x251)
+                        for j in range(i + 1, min(i + 9, len(ops))))):
+            arm = i
+    if arm is None:
+        # The 7.14.43 driver (agcombo) arms the detector without the 0x02e4
+        # maskset. Its first poll after the channel switch is the arm's own
+        # turn all the same, 150 ms before the next one.
+        arm = next((i - 1 for i in range(mhf, len(ops))
+                    if match(ops[i][2], ops[i][3], "PHY.RD", 0x251)), None)
+    if arm is not None:
+        polls = [i for i in range(arm + 1, len(ops))
+                 if match(ops[i][2], ops[i][3], "PHY.RD", 0x251)]
+        # The first poll is the arm's own turn, emitted by the driver.
+        out += [(ops[i][0], ops[i][1], "POLL") for i in polls[1:]]
+        for i in range(arm + 1, len(ops)):
+            if mk.bss_row(ops, i):
+                out.append((ops[i][0], ops[i][1], "BSS_UP"))
+                break
+
+    # NOISE: il completamento del campione, cioe' il latch della finestra. Il
+    # marcatore e' la lettura di 0x008c, che apre il blocco: e' l'unica cosa
+    # della traccia pinnata su una sola CPU -- 4255 occorrenze su 4255 -- e
+    # quindi un contesto a parte da chi la precede.
+    out += [(ops[i][0], ops[i][1], "NOISE") for i in range(mhf, len(ops))
+            if match(ops[i][2], ops[i][3], "OBJ.RD", 0x8c)]
+
+    pre = 0
+    for i in range(mhf, len(ops) - 1):
+        t, n, op, rest = ops[i]
+        if (op == "OBJ.WR" and re.match(r"^addr=0x0*1[8a]\b", rest)
+                and mk.suspend_after(ops, i)):
+            if i < first:
+                pre += 1
+            else:
+                out.append((t, n, "TPL"))
+
+    out += interrupts(ops)
+
+    out.sort(key=lambda e: (e[0], e[1]))
+
+    # The watchdog counter's phase: the measure block falls where the
+    # counter reads period - 1 mod period, the region dump where it reads 29
+    # mod 30. The dump pins the phase mod 30; without one in the segment the
+    # measure blocks pin it mod their period and the residue is chosen so that
+    # no dump falls inside the segment, which is what the capture shows.
+    # An entry turn is two events for one callback, so the counter is one
+    # behind the event index from there on, and the segment advances it once
+    # less than it has events.
+    off = 1 if entry else 0
+    phase = None
+    turn_t = [ops[i][0] for i in turns]
+    advances = len(turns) - off
+    for i, (t, _, op, rest) in enumerate(ops):
+        if t >= t_first and mk.dump(ops, i):
+            idx = sum(1 for x in turn_t if x <= t) - 1
+            phase = (29 - idx + off) % 30
+            break
+    if phase is None:
+        # The measure block's period is the board's temps_period, 10 turns
+        # where the SROM leaves it unprogrammed and 5 on the tg789vac: read
+        # it off the segment, as the spacing between two measure blocks.
+        measures = []
+        for i, (t, _, op, rest) in enumerate(ops):
+            if not match(op, rest, "PHY.RD", 0x73c) or t < t_first:
+                continue
+            if any(mk.amt(ops, j) for j in range(max(0, i - 60), i)):
+                continue
+            idx = sum(1 for x in turn_t if x <= t) - 1
+            if t - turn_t[idx] > 1.5:
+                continue
+            if not measures or idx != measures[-1]:
+                measures.append(idx)
+        gaps = [b - a for a, b in zip(measures, measures[1:])]
+        period = min(gaps) if gaps else 10
+        phase = (period - 1 - measures[0] + off) % period if measures else 0
+        for cand in range(phase, 30, period):
+            if (29 - cand) % 30 >= advances:
+                phase = cand
+                break
+    return out, phase, pre, entry
+
+
+def interrupts(ops):
+    """IRQ events: one per interrupt the handler takes, with what it saw."""
+    out = []
+    taken = set()
+    for i, (t, n, op, rest) in enumerate(ops):
+        if op != "REG.RD" or not rest.startswith("off=0x0128"):
+            continue
+        reason = val(rest)
+        if not reason:
+            continue
+        # The mask-off is the handler's first write; a MACCONTROL read or a
+        # PHY access of another context can sit between the two, and the
+        # handler may read the reason twice before it.
+        j = next((k for k in range(i + 1, min(i + 8, len(ops)))
+                  if ops[k][2] == "REG.WR" and
+                  ops[k][3].startswith("off=0x012c val=0x00000000")), None)
+        if j is None or j in taken:
+            continue
+        taken.add(j)
+        dma0 = 0
+        for k in range(j + 1, min(j + 400, len(ops))):
+            _, _, o, r = ops[k]
+            if o == "REG.WR" and r.startswith("off=0x012c") and val(r):
+                break
+            if o == "REG.WR" and r.startswith("off=0x0020"):
+                dma0 = val(r)
+        out.append((t, n, "IRQ 0x%08x 0x%08x" % (reason, dma0)))
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("capture")
+    ap.add_argument("outfile")
+    a = ap.parse_args()
+
+    out, phase, pre, entry = events(load(a.capture))
+    with open(a.outfile, "w") as f:
+        for t, n, kind in out:
+            f.write(f"{t:.6f} {n} {kind}\n")
+    if not out:
+        return 1
+    print(f"AC_TIMELINE={a.outfile} AC_WD_PHASE={phase} AC_BEACON_RELOADS={pre}"
+          f" AC_WD_ENTRY_TURN={int(entry)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
