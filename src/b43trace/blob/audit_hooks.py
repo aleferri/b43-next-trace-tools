@@ -250,15 +250,7 @@ def leggi_enum(src):
 
 def leggi_classi():
     """numero -> nome di classe, dal decoder: e' l'unico posto dove stanno."""
-    path = decode_wl_diag.__file__
-    try:
-        src = open(path).read()
-    except OSError:
-        return {}
-    cl = {}
-    for m in re.finditer(r'(\d+):\s*"([A-Z][A-Z0-9._]*)"', src):
-        cl[int(m.group(1))] = m.group(2)
-    return cl
+    return dict(decode_wl_diag.OPS)
 
 
 # ---------------------------------------------------------------- l'oggetto
