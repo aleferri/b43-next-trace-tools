@@ -19,14 +19,14 @@
 #   (l'export arriva in 2.6.33), le si passa l'indirizzo:
 #     A=$(awk '$3=="kallsyms_lookup_name"{print $1}' /proc/kallsyms)
 #     insmod /tmp/wl_diag.ko arm=1 klookup=0x$A
-#   reverse-tools/gen_syms.py costruisce quella riga da un dump di
+#   b43trace gen-syms costruisce quella riga da un dump di
 #   /proc/kallsyms, e dice in anticipo quali hook si risolveranno.
 #   poi, su entrambi:
 #     cat /proc/wl_diag | nc <HOST> 5555 &
 # sull'host:
-#     ncat -l 5555 | python3 decode-wl-diag.py | tee cold.txt
+#     ncat -l 5555 | b43trace decode-wl-diag | tee cold.txt
 # a fine corsa:
-#     python3 reverse-tools/split_trace.py --on mark cold.txt split/
+#     b43trace split-trace --on mark cold.txt split/
 #
 # I confini fra i cicli sono record MARK dentro la traccia, scritti da qui con
 # `echo "ch36 bw20" > /proc/wl_diag`; wl_diag aggiunge "mod COMING"/"mod GOING"
@@ -357,4 +357,4 @@ done
 marca "fine corsa"
 echo ""
 echo "fatto. Taglia la traccia con:"
-echo "  python3 split_trace.py --on mark <trace> split/ --bringup-only"
+echo "  b43trace split-trace --on mark <trace> split/ --bringup-only"

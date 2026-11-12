@@ -4,7 +4,7 @@
 # chanspec ; [ssid] ; up ; attesa ; [bss up ; attesa] ; down -- ma su questo
 # firmware il ricarico di `wl` ha quattro condizioni che lo script generico non
 # conosce, e ognuna da sola manda il router in crash o produce una cattura che
-# mente. Sono tutte documentate in router-data/tg789vac-v2/README.md.
+# mente. Sono tutte documentate in router-data/tg789vac-v2/README.md di b43-ac-wip.
 #
 # 1. wl, wlemf e wfd NON stanno in vmalloc: il kernel Technicolor li mette in
 #    una regione fisica riservata da 5 MiB con un cursore che avanza e non
@@ -44,16 +44,16 @@
 #    cresce, il numero di cicli per boot ha un limite e va misurato, non
 #    ignorato.
 #
-# Sul device, una volta sola (il cursore lo trova reverse-tools/memfind.c e lo
+# Sul device, una volta sola (il cursore lo trova device/devmem/memfind.c e lo
 # conferma la lui/lw in module_alloc; 0x80575464 e' quello di questa unita' e
 # di questo firmware, non e' portabile):
 #     insmod /tmp/wl_diag.ko target=wl arm=1 skipphyrd="0x253,0x254" \
 #            bump_ptr=0x80575464 restore_alloc=1
 #     cat /proc/wl_diag | nc <HOST> 5555 &
 # sull'host:
-#     ncat -l 5555 | python3 decode-wl-diag.py | tee cold.txt
+#     ncat -l 5555 | b43trace decode-wl-diag | tee cold.txt
 # a fine corsa:
-#     python3 reverse-tools/split_trace.py --on mark cold.txt split/
+#     b43trace split-trace --on mark cold.txt split/
 #
 # Uso, come capture_cold_init.sh:
 #   sh capture_cold_tg789vac.sh 20 36
@@ -77,7 +77,7 @@
 # I comandi dati al driver li registra wl_diag stesso, con l'hook su
 # wlc_ioctl: ogni `wl <variabile> <valore>` compare nella traccia come
 # IOVAR.SET, gli altri ioctl come IOCTL, quindi lo script non marca ne' il
-# canale ne' phycal_tempdelta. split_trace.py --on mod ricava il nome del
+# canale ne' phycal_tempdelta. b43trace split-trace --on mod ricava il nome del
 # segmento dal `wl chanspec` registrato. Serve un wl_diag con quell'hook: se il
 # dmesg non ne riporta il piano lo script lo dice prima di partire.
 #
@@ -395,4 +395,4 @@ echo "FAP: messaggi 'Exceeded maximum' in questo boot: `conta_dmesg 'Exceeded ma
 riavvia_hostapd
 echo ""
 echo "fatto. Taglia la traccia con:"
-echo "  python3 split_trace.py --on mark <trace> split/ --bringup-only"
+echo "  b43trace split-trace --on mark <trace> split/ --bringup-only"

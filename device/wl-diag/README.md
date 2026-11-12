@@ -5,7 +5,7 @@ with an entry detour (no kprobes) and exposes the records through
 `/proc/wl_diag`. `3-4-11/` targets kernel 3.4 with `wl` 7.14; `2-6-30/`
 targets 2.6.30 with `wl` 6.30; `4-4-arm/` targets kernel 4.4 on ARM (the
 Northstar routers, BCM4709) and attaches with kprobes instead, see "ARM"
-below. The three share the record format and `decode-wl-diag.py`. The head of `3-4-11/wl_diag.c` documents the mechanism
+below. The three share the record format and `b43trace decode-wl-diag`. The head of `3-4-11/wl_diag.c` documents the mechanism
 and its limits: MIPS32R1, module memory written in place,
 `flush_icache_range`; the head of `2-6-30/wl_diag.c` lists what the 2.6.30
 variant leaves out.
@@ -55,7 +55,7 @@ through object memory
   still resolve through kallsyms, a stripped blob (the TG789vac's) is what hides
   them.
 - **Signatures come from the prologue**, not the name:
-  `../reverse-tools/mipsdis.py <object> --prologo <symbol>`
+  `b43trace mipsdis <object> --prologo <symbol>`
   (`phy_reg_write_array(pi, array, n)` takes a pointer and is only a marker;
   `wlc_bmac_write_ihr(hw, off, val)`, `wlc_bmac_set_shm(hw, off, val, len)`).
 - **Op codes** are the same numbers in both tracers (2.6.30 has 1-50, 55-59
@@ -83,7 +83,7 @@ each hook as `kprobe`, `kretprobe`, `absent`, `dropped` or `refused`, then
 how many resolved and attached. `maxactive` (default 64) is the number of
 calls of one `retcap` accessor that can be pending at once; past it a
 return value is lost, and the count is logged at disarm. The records are
-handed out big-endian, so `decode-wl-diag.py` reads the stream unchanged.
+handed out big-endian, so `b43trace decode-wl-diag` reads the stream unchanged.
 
 ```sh
 cd 4-4-arm && make KDIR=/path/to/kernel-4.4 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j
@@ -103,14 +103,14 @@ attach gives **no error**: the capture just lacks that class. The same
 decisions can be made offline from the pre-link object:
 
 ```sh
-python3 ../reverse-tools/audit_hooks.py wlD6220.o 3-4-11/wl_diag.c
+b43trace audit-hooks wlD6220.o 3-4-11/wl_diag.c
 ```
 
 It prints one line per hook (`detour`, `short-j`, `sites`, `dropped`,
 `absent`), the classes a capture would contain, and checks the shape of the
 hook table. The verdict on prologue and return register is definitive; the
 call-site count is a minimum. Whether the hooked function is called on the path
-of interest is `../reverse-tools/callsites_pic.py`'s question.
+of interest is `b43trace callsites-pic`'s question.
 
 ## Parameters
 
@@ -129,8 +129,8 @@ of interest is `../reverse-tools/callsites_pic.py`'s question.
 | `rxbudget` | `256` | RX frames left to record, counting down |
 | `txsdump` | `0` | bytes of each TX status structure to record, up to 128; 64 to start with, its size differs between versions. Writable at run time |
 | `txsbudget` | `256` | TX statuses left to record, counting down |
-| `klookup` | `0` | 2.6.30 only: address of `kallsyms_lookup_name` from `/proc/kallsyms`, which that kernel does not export to modules. `../reverse-tools/gen_syms.py` builds the `insmod` line |
-| `bump_ptr`, `restore_alloc` | — | 3.4 only: rewind the reserved-module allocator on the TG789vac v2 (see `../router-data/tg789vac-v2/README.md`) |
+| `klookup` | `0` | 2.6.30 only: address of `kallsyms_lookup_name` from `/proc/kallsyms`, which that kernel does not export to modules. `b43trace gen-syms` builds the `insmod` line |
+| `bump_ptr`, `restore_alloc` | — | 3.4 only: rewind the reserved-module allocator on the TG789vac v2 (see `router-data/tg789vac-v2/README.md` in b43-ac-wip) |
 
 ## TX frames
 
@@ -142,7 +142,7 @@ first `txdump` bytes of the frame, from the linear part of the `sk_buff` or
 from the buffer, and queues them as one group: a `TX.PKT` record (length
 posted, bytes following, 1 in `aux` for a raw buffer) and the bytes in
 `TX.DATA` records, twelve each, packed like `MARK`. The decoder reads the header with
-`../reverse-tools/d11ac_txh.py`, which `../wl-mmio-trap/` shares.
+`b43trace.d11.ac_txh`, which `../wl-mmio-trap/` shares.
 
 ```sh
 echo 168 > /sys/module/wl_diag/parameters/txdump
@@ -177,7 +177,7 @@ many frames came that way instead of reading them as an `sk_buff`.
 `wlc_recv(wlc, p)` is where the bmac layer hands a received frame to wlc,
 the d11 RX header still in front of it. With `rxdump` set, `pkt_rec()`, the
 same function as for TX, records its start as `RX.PKT` + `RX.DATA`, and the
-decoder reads the header with `../reverse-tools/d11ac_rxh.py` at the offsets
+decoder reads the header with `b43trace.d11.ac_rxh` at the offsets
 `b43_rx()` uses: frame length (checked against the packet's), PHY and MAC
 RX status, the two power bytes, the padding flag, the PLCP read by the frame
 type in PHY status 0, the 802.11 header, and the 16 bytes b43 does not read
@@ -203,7 +203,7 @@ On the D6220's 7.14.89 (`wlD6220.o_save`) the five TX and RX hooks take the
 4-word detour (`audit_hooks.py`), and the caller, `wlc_bmac_txstatus()`,
 builds `txs` on its stack: the frame ID at +2, the low half of `XMITSTAT_0`
 at +32, `XMITSTAT_2`/`3` at +34/+38, the second package at +42-+57, and
-`XMITSTAT_1` left in a2. `decode-wl-diag.py --txs-714` rebuilds the eight
+`XMITSTAT_1` left in a2. `b43trace decode-wl-diag --txs-714` rebuilds the eight
 words from there in the format of b43's `TX status` warning, with the
 reading of `b43_txstatus_read_ac()`. 6.30 keeps them 16 bytes lower.
 
@@ -213,14 +213,14 @@ reading of `b43_txstatus_read_ac()`. 6.30 keeps them 16 bytes lower.
 each chanspec, template RAM content through the bring-up, then TX and RX
 headers, and the TX statuses where the module has them, while a station
 passes traffic both ways, cut by `MARK` records
-(`tpl <chanspec>`, `txrx <chanspec>`, `end`) for `split_trace.py --on mark`.
+(`tpl <chanspec>`, `txrx <chanspec>`, `end`) for `b43trace split-trace --on mark`.
 `VHTMODE=0` sets `wl vhtmode 0` while the interface is down, so a VHT
 station joins as HT and the frames are HT (frame type 2); 80 MHz needs VHT,
 so that run takes the 20 and 40 MHz chanspecs:
 
 `TXBF=0` sets `wl txbf 0` the same way: on 7.14.89 the PHY TX control words
 and the PLCP come from functions that are 6.30's plus beamforming (see
-`../docs/retrace-todo.md`, "TX"), so without it the descriptors are those
+`docs/retrace-todo.md` in b43-ac-wip, "TX"), so without it the descriptors are those
 6.30 would build.
 
 ```sh
@@ -244,7 +244,7 @@ echo 64  > /sys/module/wl_diag/parameters/tplbudget
 ```
 
 The decoder prints the `TPL.RAMW` line as before and the content under it:
-`../reverse-tools/d11_template.py` finds a beacon or probe response by its
+`b43trace.d11.template` finds a beacon or probe response by its
 frame control and the SSID element that opens the body, prints the bytes in
 front of it raw, then header, fixed fields and elements; anything else, the
 waveforms included, comes out in hex. The tone waveforms of a calibration
@@ -261,8 +261,8 @@ cd 3-4-11 && make KDIR=/path/to/kernel-3.4-rt ARCH=mips CROSS_COMPILE=mips-linux
 cd 2-6-30 && make KDIR=/path/to/kernel-2.6.30 ARCH=mips CROSS_COMPILE=mips-linux- -j
 ```
 
-Copy `wl_diag.ko` to the device and `decode-wl-diag.py` to the collecting host.
-Run `../reverse-tools/csanity.py` on `wl_diag.c` first.
+Copy `wl_diag.ko` to the device and install `b43trace` on the collecting host.
+Run `b43trace csanity` on `wl_diag.c` first.
 
 ## Capture workflow
 
@@ -277,11 +277,11 @@ reference on `wl`, since `rmmod wl` is the core step of a cold capture.
 1. **Start the host listener first.** Use TCP (busybox `nc` has no `-u`):
 
    ```sh
-   ncat -l 5555 | python3 decode-wl-diag.py | tee trace.txt
+   ncat -l 5555 | b43trace decode-wl-diag | tee trace.txt
    ```
 
    On Windows, write a raw `.bin` with `ncat` or a PowerShell `TcpListener`, and
-   decode it afterwards: `python decode-wl-diag.py < trace.bin > trace.txt`.
+   decode it afterwards: `b43trace decode-wl-diag < trace.bin > trace.txt`.
 2. **Check the plan** on the device: `insmod wl_diag.ko` (dry run; on 2.6.30
    add `klookup=`), `dmesg | grep wl_diag`, `rmmod wl_diag`.
 3. **Arm and start the pipe**:
@@ -302,7 +302,7 @@ reference on `wl`, since `rmmod wl` is the core step of a cold capture.
 **Cycle boundaries** are MARK records. Writing to the buffer
 (`echo "ch36 bw20" > /proc/wl_diag`, twelve characters) injects a label.
 `wl_diag` adds `mod COMING` / `mod GOING` itself. MARK records are queued with
-the operations around them, and `../reverse-tools/split_trace.py --on mark`
+the operations around them, and `b43trace split-trace --on mark`
 cuts on them.
 
 **Bringing the BSS up.** Setting the SSID before `up` and running `bss up` is

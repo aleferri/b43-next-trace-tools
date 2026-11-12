@@ -9,7 +9,7 @@
 #                      TXS with the TX status when the module has it
 #   end
 #
-# so `reverse-tools/split_trace.py --on mark` splits it afterwards.
+# so `b43trace split-trace --on mark` splits it afterwards.
 #
 # Assumes:
 #   - wl_diag.ko armed (arm=1), with wlc_txfifo, wlc_recv and

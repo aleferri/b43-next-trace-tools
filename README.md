@@ -7,7 +7,8 @@ AC-PHY port against the captures. The driver and its tests are in
 
 The host side is the Python package `b43trace`, in `src/`. Each tool is a
 module of the package and runs as `b43trace <tool>`; `b43trace` alone lists
-them. Each tool's `--help` and header say more.
+them. Each tool's `--help` and header say more. What runs on the router is
+in `device/` ("Device side").
 
 ```sh
 pip install -e '.[elf]'     # the extra brings pyelftools, for the ELF readers
@@ -54,10 +55,10 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
 
 ### Bus-level captures
 
-- **decode-wl-mmio** decodes the records of `wl-mmio-trap/`, the raw accesses
+- **decode-wl-mmio** decodes the records of `wl-mmio-trap`, the raw accesses
   and the TX descriptors read at their index write.
 - **mmio2ops** decodes raw BAR0 accesses, an x86 mmiotrace, the binary
-  records of `wl-mmio-trap/` or the bpftrace and ftrace kprobe captures of
+  records of `wl-mmio-trap` or the bpftrace and ftrace kprobe captures of
   the hybrid `wl`'s accessors, into the same vocabulary (`PHY.*`, `RAD.*`,
   `OBJ.*` with `sel=`, `MAC.*`, `REG.*`, plus `CC.*`, `SROM.RD`, `WRAP.*`,
   `PCIE.*`, `EROM.RD`). The window's core is inferred from unambiguous offsets
@@ -139,7 +140,7 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
 - **mipsdis** is a minimal big-endian MIPS32 disassembler that reads hook
   signatures from prologues (`--prologo`).
 - **cmp-funcs** compares same-name function bodies across `wl` builds.
-- **gen-syms** builds the `klookup=` insmod line of `wl-diag/2-6-30`.
+- **gen-syms** builds the `klookup=` insmod line of `device/wl-diag/2-6-30`.
 - **extract-ucode** extracts a `d11ucodeNN` blob from a `wl` object by
   symbol (`--rev`, `--symbol`, `--list`).
 - **extract-acphy-tables-from-descriptor** (it generated
@@ -148,9 +149,20 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
 
 ## Device side
 
-- **mempeek.c**, **pcicfg.c**, **memfind.c** in `reverse-tools/`: static
-  helpers over `/dev/mem` and `/proc/bus/pci` (read MMIO, repoint `BAR0_WIN`
-  onto ChipCommon, find a kernel variable by value).
+Under `device/`, each with its README:
+
+- `wl-diag/`: the kernel module that hooks the stock `wl` driver's hardware
+  accessors and records them, for kernel 3.4 and 2.6.30 on MIPS and 4.4 on
+  ARM; **decode-wl-diag** reads its stream.
+- `wl-mmio-trap/`: the register accesses `wl-diag` cannot see, trapped on
+  `wl`'s register window; **decode-wl-mmio** and **mmio2ops** read its
+  records. `make check` in its `tools/` runs the host checks of its
+  pure-logic units.
+- `wl-cc-dump/`: the ChipCommon PMU state of a running device, in `dmesg`.
+- `devmem/`: `mempeek.c`, `pcicfg.c`, `memfind.c`, static helpers over
+  `/dev/mem` and `/proc/bus/pci` (read MMIO, repoint `BAR0_WIN` onto
+  ChipCommon, find a kernel variable by value); `mempeek` and `pcicfg` are
+  there built for MIPS. Each source's header says how to build it.
 - `wl-capture-scripts/`: `capture_cold_init.sh` (one `wl` reload per
   channel), `capture_hot_init.sh` (`{chanspec; up; wait; down}`, split with
   `--on chanspec`), `capture_profiles.sh` (the shared channel lists, copied next

@@ -29,7 +29,7 @@
  * straight away.
  *
  * The queue holds records in host order; wd_read() hands them out
- * big-endian, the stream format of ../decode-wl-diag.py, so the stream is
+ * big-endian, the stream format of b43trace decode-wl-diag, so the stream is
  * the one the MIPS variants write. Timestamps are local_clock():
  * sched_clock() is not exported to modules on ARM.
  */

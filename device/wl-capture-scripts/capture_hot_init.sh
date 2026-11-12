@@ -1,6 +1,6 @@
 #!/bin/sh
 # Piano di cattura: sweep di canali e larghezze, da splittare a posteriori sui
-# record CHANSPEC con `reverse-tools/split_trace.py --on chanspec`.
+# record CHANSPEC con `b43trace split-trace --on chanspec`.
 #
 # Presupposti:
 #   - wl_diag.ko armato (arm=1) e listener TCP attivo sull'host;
@@ -60,7 +60,7 @@ SSID="$4"
 # capture_profiles.sh.
 #
 # Che il check radar sia pendente lo dice la cattura, non il piano: sui
-# segmenti che lo sono reverse-tools/timeline.py trova i poll del rivelatore.
+# segmenti che lo sono b43trace timeline trova i poll del rivelatore.
 DIR="${0%/*}"
 [ "$DIR" = "$0" ] && DIR=.
 if [ ! -f "$DIR/capture_profiles.sh" ]; then

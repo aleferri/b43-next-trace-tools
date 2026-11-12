@@ -5,9 +5,9 @@
  *
  * The mechanism and the record format are those of the 3.4 variant: see the
  * head of ../3-4-11/wl_diag.c. The op codes are a subset of the 3.4 ones, with
- * the same values, so ../decode-wl-diag.py decodes the traces of every router
- * and they can be cross-correlated (between versions of wl the content of the
- * trace changes, not its format).
+ * the same values, so b43trace decode-wl-diag decodes the traces of every
+ * router and they can be cross-correlated (between versions of wl the content
+ * of the trace changes, not its format).
  *
  * Compared with 3.4 this lacks the break path, the diversion of the tail
  * call, the stop_machine around the entry patches, the one-hook-per-op rule,
@@ -391,8 +391,8 @@ static bool readable(const void *p, u32 n)
  * packing by hand and does not tell the two versions apart. Twelve characters
  * per record, explicitly big-endian, the excess cut.
  *
- * They are the boundary `split_trace.py --on mark` cuts on: without them a
- * sweep has no segments and hot and cold cannot be told apart. */
+ * They are the boundary `b43trace split-trace --on mark` cuts on: without
+ * them a sweep has no segments and hot and cold cannot be told apart. */
 static u32 pack4(const char *p)
 {
 	return ((u32)(u8)p[0] << 24) | ((u32)(u8)p[1] << 16) |
@@ -545,10 +545,10 @@ static struct hook hooks[] = {
 	 * makes it the anchor for segmenting a sweep.
 	 *
 	 * A COLD cycle comes from reloading the target module, which is what
-	 * wl-capture-scripts/capture_cold_init.sh does, not from tampering
-	 * with the PHY struct from the stub. The "already calibrated" byte (227
-	 * on 6.30, 251 on 7.14.89) stays a note: when cold it is that byte at
-	 * zero that makes cal_init complete. */
+	 * device/wl-capture-scripts/capture_cold_init.sh does, not from
+	 * tampering with the PHY struct from the stub. The "already calibrated"
+	 * byte (227 on 6.30, 251 on 7.14.89) stays a note: when cold it is that
+	 * byte at zero that makes cal_init complete. */
 	{ "wlc_phy_cal_init", OP_CAL_INIT,   0, 0, 0 },
 	{ "wlc_bmac_bw_set",  OP_MAC_BW,     0, 1, 0 },
 	{ "si_get_sromctl",   OP_SROMCTL_R,  0, 0, 0, .retcap = true },

@@ -5,14 +5,14 @@ loads and stores through `wl`'s own register pointer, which have no function
 to hook. It makes `wl`'s register window fault on every access and emulates
 the trapped instruction. It finds the window by itself, so it can be loaded
 before `wl`, after it, or between two `ifconfig up`. The agcombo captures in
-`router-data/vd625-agcombo/*.bin` were taken with it.
+`router-data/vd625-agcombo/*.bin` of b43-ac-wip were taken with it.
 
 This is the MIPS build, for kernels 3.4 and 2.6.30. The ARM build for the
 Northstar routers (kernel 4.4) is in [`4-4-arm/`](4-4-arm/): it hooks the
 data-abort dispatch table rather than a breakpoint on a fault path, so it
 needs no `CONFIG_KPROBES`-off and emulates A32 loads and stores instead of
-MIPS ones; the record format and `decode-wl-mmio.py` are the same. The rest
-of this file is the MIPS build.
+MIPS ones; the record format and `b43trace decode-wl-mmio` are the same. The
+rest of this file is the MIPS build.
 
 ## How it works
 
@@ -96,8 +96,8 @@ insmod wl_mmio_trap.ko autoarm=0 klookup=0x<address>
 ```
 
 `build-dsl3580l.sh` builds it against the router's own GPL kernel tree
-(`DSL-3580_EU_1.00`, `PROVENANCE.md`); no capture from the DSL-3580L is in
-`router-data/`. Before loading, look in `/proc/kallsyms` for
+(`DSL-3580_EU_1.00`, `PROVENANCE.md` of b43-ac-wip); no capture from the
+DSL-3580L is in its `router-data/`. Before loading, look in `/proc/kallsyms` for
 `fixup_exception`, `r4k_flush_icache_range`, `flush_tlb_kernel_range` and
 `__compute_return_epc`.
 
@@ -186,13 +186,13 @@ module holds its ptes. Off by default.
 
 ## Reading the capture
 
-`decode-wl-mmio.py` is a stdin filter (`--since LABEL`, `--until LABEL`,
+`b43trace decode-wl-mmio` is a stdin filter (`--since LABEL`, `--until LABEL`,
 `--base`, `--hex` for the raw bytes of the TX buffers). It recognises the
 d11 AC TX header, with or without the TX offload header in front, from the
 `frame_len` that matches the descriptor's byte count, and prints its fields,
 the rate blocks with their PHY TX control words, the PLCP read as L-SIG,
 HT-SIG or VHT-SIG-A by the frame type, and the 802.11 header. For register-level decoding give the binary to
-`../reverse-tools/mmio2ops.py`, which reads it directly. The offsets are the
+`b43trace mmio2ops`, which reads it directly. The offsets are the
 CPU side; on this big-endian host a 16-bit register is at `offset ^ 2`, which
 mmio2ops applies. The ARM build records the device side instead and sets
 `0x200` in `aux` to say so (see `4-4-arm/README.md`).

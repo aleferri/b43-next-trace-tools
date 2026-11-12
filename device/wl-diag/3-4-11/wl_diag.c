@@ -116,7 +116,7 @@ MODULE_PARM_DESC(delay, "0=do not hook osl_delay (default), 1=hook it");
  * one behind "Load wl module core" -- that advances a cursor and never rewinds
  * it, so after an rmmod the target's block is not available to the next
  * insmod. bump_ptr is the KSEG0 address of that cursor, found with
- * reverse-tools/memfind and confirmed on the code of module_alloc: kallsyms
+ * device/devmem/memfind and confirmed on the code of module_alloc: kallsyms
  * cannot give it, the variable is data and this kernel has no KALLSYMS_ALL.
  *
  * At the target's GOING the cursor is rewound to module_core, provided the
@@ -549,10 +549,10 @@ static struct hook hooks[] = {
 	 * detour holds.
 	 *
 	 * A COLD cycle comes from reloading the target module, which is what
-	 * wl-capture-scripts/capture_cold_init.sh does, not from tampering with
-	 * the PHY struct from the stub. The "already calibrated" byte (251 on
-	 * 7.14.89, 227 on 6.30) stays a note: when cold it is pi->[251] == 0 that
-	 * makes cal_init complete. */
+	 * device/wl-capture-scripts/capture_cold_init.sh does, not from
+	 * tampering with the PHY struct from the stub. The "already calibrated"
+	 * byte (251 on 7.14.89, 227 on 6.30) stays a note: when cold it is
+	 * pi->[251] == 0 that makes cal_init complete. */
 	{ "wlc_phy_cal_init", OP_CAL_INIT,   0, 0, 0 },
 	{ "wlc_bmac_bw_set",  OP_MAC_BW,     0, 1, 0 },
 	{ "si_get_sromctl",   OP_SROMCTL_R,  0, 0, 0, .retcap = true },
@@ -590,7 +590,8 @@ static struct hook hooks[] = {
 	 * The second: the bulk carries the SELECTOR, and with it the region. In
 	 * the current captures every OBJ op is shared memory, and nothing is seen
 	 * of any other region -- among them the address match table, which is the
-	 * open question on MAC and BSSID in docs/retrace-todo.md.
+	 * open question on MAC and BSSID in docs/retrace-todo.md of
+	 * b43-ac-wip.
 	 *
 	 *   wlc_bmac_copyfrom_objmem(hw, offset, buf, len, sel)
 	 *   wlc_bmac_copyto_objmem(hw, offset, buf, len, sel)
@@ -627,7 +628,8 @@ static struct hook hooks[] = {
 	 * arms clean and stays mute for the whole run -- measured: ADDRM.SET at 0
 	 * over 45 cycles on the TG789vac v2, against 5280 on the D6220 where the
 	 * op went to the wlc level. It is the same reason RCMTA.WR cannot appear
-	 * on this core, already written down in router-data/CLASS-COVERAGE.md.
+	 * on this core, already written down in b43-ac-wip's
+	 * router-data/CLASS-COVERAGE.md.
 	 * So the wlc-level entries come first and set_rxe_addrmatch stays as the
 	 * last resort, for a build where neither of the two above resolves. */
 	{ "wlc_bmac_set_addrmatch", OP_ADDRMATCH, 1, 0, 0, .shortj = true },
@@ -683,7 +685,7 @@ static struct hook hooks[] = {
 	 * in that blob *nobody* calls phy_reg_write_wide -- zero lui/addiu pairs
 	 * point here. The hook gets planned and never emits. It matters for builds
 	 * where the function is live, and so that the plan is clean.
-	 * Checked with reverse-tools/audit_hooks.py; to be re-checked on 6.30 when
+	 * Checked with b43trace audit-hooks; to be re-checked on 6.30 when
 	 * that object is within reach. */
 	{ "phy_reg_write_wide",  OP_PHY_WRW,  0, 1, 0, .shortj = true },
 	{ "wlc_bmac_write_ihr",  OP_IHR_W,    1, 2, 0 },
@@ -700,7 +702,7 @@ static struct hook hooks[] = {
 	 * short-j: the prologue is lw / addiu / lhu / beq, branch in word 3. The
 	 * first two words write $v0 and $v1, so the re-entry stays on $t9.
 	 * Signature wlc_bmac_phyclk_fgc(hw, force): force in a1, an `andi a1,0xff`
-	 * says so. Checked with reverse-tools/audit_hooks.py on the module pulled
+	 * says so. Checked with b43trace audit-hooks on the module pulled
 	 * out of the firmware, which is the same code as the prelink object. */
 	{ "wlc_bmac_phyclk_fgc", OP_PHY_FGC,  0, 1, 0, .shortj = true },
 	/* The configuration userspace gives the driver: `wl <cmd>` and every other
@@ -715,7 +717,7 @@ static struct hook hooks[] = {
 	 * the trace at all. ioctl_rec() decodes the payload; see it for the records.
 	 *
 	 * wlc_ioctl is a thunk: lui/addiu $t9, jr $t9, nop (read with
-	 * reverse-tools/mipsdis.py on wlD6220.o, 7.14.89). The first two words
+	 * b43trace mipsdis on wlD6220.o, 7.14.89). The first two words
 	 * are not PC-relative, so the short-j re-runs them and returns to the jr;
 	 * word 0 writes $t9, so the re-entry goes through $t8. */
 	{ "wlc_ioctl",          OP_IOCTL,    1, 2, 3, .shortj = true },

@@ -14,7 +14,7 @@ all five. There is no full `wl` in the DD-WRT tree.
   own `wlconf`), and `ssid` + `bss up` on a STA bring no BSS up.
 
 With both, the scripts ran unchanged on a Netgear R7000
-([`../../router-data/r7000/`](../../router-data/r7000/)).
+([`router-data/r7000/`](https://github.com/aleferri/b43-ac-wip/tree/main/router-data/r7000) in b43-ac-wip).
 
 ## Build and install
 

@@ -17,7 +17,7 @@
 # l'indirizzo di kallsyms_lookup_name, una riga di /proc/kallsyms:
 #   insmod wl_diag.ko arm=1 klookup=0x<addr_di_kallsyms_lookup_name>
 # e il modulo trova gli altri da solo, ririsolvendoli a ogni ricaricamento del
-# bersaglio. ../../reverse-tools/gen_syms.py costruisce la riga da un dump di
+# bersaglio. b43trace gen-syms costruisce la riga da un dump di
 # /proc/kallsyms e dice in anticipo quali hook si risolveranno.
 # Per forzare lo stesso comportamento su un kernel piu' recente:
 #   make KDIR=... EXTRA_CFLAGS=-DWLDIAG_NO_KALLSYMS ...

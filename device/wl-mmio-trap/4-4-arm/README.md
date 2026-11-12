@@ -7,9 +7,10 @@ loads and stores through `wl`'s own register pointer -- by faulting them. The
 mechanism and the record format are the parent directory's; see `../README.md`
 for the capture workflow and the decoder. Only what differs on ARM is here.
 
-It has run under DD-WRT on a Netgear R7000 (`router-data/r7000/`) and an
-ASUS RT-AC66U B1 (`router-data/rt-ac66u-b1/`); it is built against v4.4 and
-the load/store emulator is checked natively (`tools/`). The self-test
+It has run under DD-WRT on a Netgear R7000 and an ASUS RT-AC66U B1
+(`router-data/r7000/` and `router-data/rt-ac66u-b1/` of b43-ac-wip); it is
+built against v4.4 and the load/store emulator is checked natively
+(`tools/`). The self-test
 (below) is the first thing to read on a new device.
 
 ## How the hook differs
@@ -211,15 +212,15 @@ echo off         > /proc/wl_mmio_trap
 echo status      > /proc/wl_mmio_trap; dmesg | tail -1
 ```
 
-Decode on the host with `python3 ../decode-wl-mmio.py < trace.bin`, or into
-op classes with `../../reverse-tools/mmio2ops.py trace.bin`.
+Decode on the host with `b43trace decode-wl-mmio < trace.bin`, or into
+op classes with `b43trace mmio2ops trace.bin`.
 
 The records carry the offset the device sees: on this little-endian host a
 16-bit access reaches the half it names, where the MIPS records carry the
 CPU side and mmio2ops moves 16-bit accesses to `offset ^ 2`. Each access
 record sets `0x200` in `aux` to tell the two apart. Captures taken before
-that flag (`router-data/r7000/mmio-*.zip`) need
-`mmio2ops.py --format wl-mmio-trap-arm`.
+that flag (`router-data/r7000/mmio-*.zip` of b43-ac-wip) need
+`b43trace mmio2ops --format wl-mmio-trap-arm`.
 
 `/proc/wl_mmio_trap` is a byte stream, so any reader works (busybox `cat`,
 `dd` with any block size); a reader stopped in the middle of a record loses

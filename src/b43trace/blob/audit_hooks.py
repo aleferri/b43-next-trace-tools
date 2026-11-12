@@ -46,7 +46,7 @@ CONFIG_KALLSYMS_ALL: `is_core_symbol()` in kernel/module.c filtra sui flag di
 sezione -- SHF_ALLOC piu' SHF_EXECINSTR quando l'opzione e' spenta -- e non sul
 binding. Quello che serve KALLSYMS_ALL e' un simbolo DATO.
 
-  b43trace audit-hooks wl.ko [wl-diag/3-4-11/wl_diag.c]
+  b43trace audit-hooks wl.ko [device/wl-diag/3-4-11/wl_diag.c]
 """
 import os
 import re
@@ -270,7 +270,7 @@ def main(ko, sorgente=None):
         root = paths.checkout()
         if root is None:
             sys.exit('passa il wl_diag.c: fuori dal checkout non ce n\'e\' uno')
-        sorgente = os.path.join(root, 'wl-diag', '3-4-11', 'wl_diag.c')
+        sorgente = os.path.join(root, 'device', 'wl-diag', '3-4-11', 'wl_diag.c')
     testo = open(sorgente).read()
 
     errori = lint(testo)

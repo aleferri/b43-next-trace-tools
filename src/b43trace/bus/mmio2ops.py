@@ -4,7 +4,7 @@ Five capture formats, the same device traffic:
 
     mmiotrace     the Linux kernel's mmiotrace text, taken on an x86 host
                   (router-data/archer-t5e);
-    wl-mmio-trap  the binary records of wl-mmio-trap/, taken on a MIPS
+    wl-mmio-trap  the binary records of device/wl-mmio-trap/, taken on a MIPS
                   big-endian router (router-data/vd625-agcombo/*.bin), or
                   on ARM by a trap that flags its device offsets;
     wl-mmio-trap-arm
@@ -117,7 +117,7 @@ def parse_mmiotrace(path):
         yield Op(float(f[2]), f[0], int(f[1]), int(f[4], 16) - BAR0, int(f[5], 16))
 
 
-# struct wl_mmio_rec of wl-mmio-trap/wl_mmio_trap_main.c, packed, big-endian.
+# struct wl_mmio_rec of device/wl-mmio-trap/wl_mmio_trap_main.c, packed, big-endian.
 TRAP_REC = struct.Struct(">QIIIIBBH")      # ts_ns seq addr val aux op cpu pad
 TRAP_RD, TRAP_WR, TRAP_MARK, TRAP_DROP = 60, 61, 62, 255
 TRAP_AUX_WIDTH = 0xff

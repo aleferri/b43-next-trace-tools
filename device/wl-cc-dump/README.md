@@ -3,12 +3,12 @@
 Reads the BCM4352/4360 **ChipCommon PMU** state from a running device and
 prints it to `dmesg`. It captures the vendor-initialised `max_res_mask` /
 `min_res_mask`, to compare with what the b43+bcma port programs in
-`bcma_pmu_resources_init()` (`bcma/drivers/bcma/driver_chipcommon_pmu.c`, `max = 0x7ff`).
+`bcma_pmu_resources_init()` (`bcma/drivers/bcma/driver_chipcommon_pmu.c` in b43-ac-wip, `max = 0x7ff`).
 
 **Results on hardware.**
 
 - `max_res_mask` reads back `0x7ff` on a BCM4360 (agcombo) and a BCM4352
-  (DSL-3580L, `../router-data/dsl3580l/dsl3580l_pmu-trace.txt`).
+  (DSL-3580L, `router-data/dsl3580l/dsl3580l_pmu-trace.txt` in b43-ac-wip).
 - `min_res_mask` reads `0x7fb`.
 - The port's `max` write therefore confirms the ROM value rather than
   overriding it.

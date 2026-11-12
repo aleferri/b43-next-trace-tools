@@ -26,9 +26,10 @@
  * the address wl last pointed the window to, and another CPU's access through
  * the window faults too and is never let past unseen.
  *
- * The records are those of the MIPS build (ops 60-64), so ../decode-wl-mmio.py
- * reads the stream unchanged; they go out big-endian, timestamps are
- * local_clock() (sched_clock() is not exported to modules on ARM).
+ * The records are those of the MIPS build (ops 60-64), so b43trace
+ * decode-wl-mmio reads the stream unchanged; they go out big-endian,
+ * timestamps are local_clock() (sched_clock() is not exported to modules on
+ * ARM).
  *
  * This first ARM version does not record TX descriptors (dma_dd on the MIPS
  * side); the register trace is the whole of it.
@@ -652,8 +653,8 @@ out:
 
 /* ---- /proc/wl_mmio_trap ------------------------------------------------- */
 
-/* Big-endian, the stream decode-wl-mmio.py reads, as the MIPS build writes
- * it natively. A MARK's label and a DATA record's bytes are already in
+/* Big-endian, the stream b43trace decode-wl-mmio reads, as the MIPS build
+ * writes it natively. A MARK's label and a DATA record's bytes are already in
  * stream order in addr/val/aux (memcpy'd there), so those stay as they are. */
 static void to_wire(struct wl_mmio_rec *r)
 {
