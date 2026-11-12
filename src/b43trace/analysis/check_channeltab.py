@@ -24,15 +24,14 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "b43")
+from b43trace.paths import driver_src
 
 PHY_BW_REGS = [0x371, 0x372, 0x373, 0x374, 0x375, 0x376]
 
 
 def parse_table():
     """channel -> {'radio_raw': [...], 'chan_raw6': [...], 'phy_bw': [...]}"""
-    text = open(os.path.join(SRC, "radio_2069.c")).read()
+    text = open(os.path.join(driver_src(), "radio_2069.c")).read()
     rows = {}
     for m in re.finditer(
             r"\.channel\s*=\s*(\d+).*?"
@@ -50,7 +49,7 @@ def parse_table():
 
 def parse_chan_writes():
     """[(reg, raw_idx)] in the order the driver emits them."""
-    text = open(os.path.join(SRC, "radio_2069.c")).read()
+    text = open(os.path.join(driver_src(), "radio_2069.c")).read()
     m = re.search(r"r2069_chan_writes\[\]\s*=\s*\{(.*?)\n\};", text, re.S)
     out = []
     for reg, idx in re.findall(r"\{\s*(0x[0-9a-fA-F]{4}),\s*(BW\(\d+\)|-?\d+)\s*\}",

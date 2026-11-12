@@ -73,7 +73,7 @@ import os
 import re
 import sys
 
-from b43trace import tracelib as T
+from b43trace import paths
 from b43trace.pipeline import trace_filter
 
 READ_LOG = re.compile(r"b43_(phy|radio)_read_log\(dev,\s*([^;)]+)\)")
@@ -105,10 +105,10 @@ def discarded_addrs():
     """(kind, addr) for every literal read_log site, plus the computed ones."""
     lit = collections.Counter()
     computed = []
-    for name in sorted(os.listdir(T.SRC)):
+    for name in sorted(os.listdir(paths.driver_src())):
         if not name.endswith(".c"):
             continue
-        for lineno, line in enumerate(open(os.path.join(T.SRC, name)), 1):
+        for lineno, line in enumerate(open(os.path.join(paths.driver_src(), name)), 1):
             for kind, arg in READ_LOG.findall(line):
                 arg = arg.strip()
                 m = LITERAL.match(arg)

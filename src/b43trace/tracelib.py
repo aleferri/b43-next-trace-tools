@@ -22,12 +22,8 @@ import sys
 import tempfile
 import zipfile
 
+from b43trace import paths
 from b43trace.pipeline import trace_filter
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "b43")
-TEST = os.path.join(ROOT, "test", "unit")
-DATA = os.path.join(ROOT, "router-data")
 
 RE_VENDOR = re.compile(r"^\s*([\d.]+)\s+#(\d+)\s+cpu\d+\s+(.*?)\s*$")
 RE_PORT = re.compile(r"^\s*cpu\d+\s+(.*?)\s*$")
@@ -412,14 +408,15 @@ def merge_retvals(path):
 
 
 def captures(include_zips=True):
-    """Every wl-diag capture under router-data/, zips included.
+    """Every wl-diag capture under paths.data_dir(), zips included.
 
     Returns [(label, path)], where the path of a capture inside an archive
     uses the `archive.zip!inner.txt` syntax that open_trace() accepts.
     """
     out = []
-    for board in sorted(os.listdir(DATA)):
-        bdir = os.path.join(DATA, board)
+    data = paths.data_dir()
+    for board in sorted(os.listdir(data)):
+        bdir = os.path.join(data, board)
         if not os.path.isdir(bdir):
             continue
         for name in sorted(os.listdir(bdir)):
@@ -448,8 +445,9 @@ def run_port(flow, board, env=None, markers=True):
     if markers:
         e["AC_FN_MARKERS"] = "1"
     e.update(env or {})
-    r = subprocess.run([os.path.join(TEST, "ac_trace"), flow, board],
-                       cwd=TEST, env=e, capture_output=True, text=True)
+    test = paths.unit_dir()
+    r = subprocess.run([os.path.join(test, "ac_trace"), flow, board],
+                       cwd=test, env=e, capture_output=True, text=True)
     return r.stdout
 
 

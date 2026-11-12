@@ -17,6 +17,12 @@ python -m b43trace.pipeline.trace_filter --retvals capture.txt folded.txt
 
 The blob tools also run `readelf` (binutils).
 
+The tools that read the port or its unit harness take them from the
+b43-ac-wip checkout named by `B43_TREE`. The wl-diag captures are taken from
+its `router-data/`, or from `B43_DATA`, a directory with one subdirectory per
+board. `anchors` resolves the capture paths of `capture-refs.conf` against
+`B43_TREE`, which is what they are relative to.
+
 ## Trace pipeline
 
 `test/unit/gates.sh` in b43-ac-wip runs the whole chain; none of it is

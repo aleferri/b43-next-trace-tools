@@ -5,7 +5,7 @@ they contain at all. An op absent from a capture that never traced its class
 says nothing about the driver, and treating the two cases alike has already
 produced wrong conclusions -- see router-data/CLASS-COVERAGE.md.
 
-  b43trace check-class-coverage                 audit every capture under router-data
+  b43trace check-class-coverage                 audit every capture of every board
   b43trace check-class-coverage <file>...        report the given captures
   b43trace check-class-coverage --require <f>   exit non-zero if f is incomplete
   b43trace check-class-coverage --conta A,B     per-class counts, one row per capture
@@ -27,6 +27,8 @@ import sys
 import tarfile
 import zipfile
 
+from b43trace.paths import data_dir
+
 # La classe e' la parte prima del punto. OBJ.BULKR/W contano anche come
 # "OBJ.BULK", perche' l'accessor bulk e' un hook a se' e la sua assenza
 # non si deve confondere con quella della coppia a 16 bit.
@@ -46,8 +48,12 @@ LATE = ("OBJ", "TPL", "CAL")
 # driver does not do it", which is the mistake CLASS-COVERAGE.md is about.
 NUOVE = ("AMT", "RCMTA", "ADDRM", "OBJ.BULK")
 
-ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                    "router-data")
+def label(path):
+    """The path relative to the data directory, when it is inside it."""
+    root = data_dir(required=False)
+    if root and path.startswith(root):
+        return os.path.relpath(path, root)
+    return path
 
 
 def conta(righe, c):
@@ -95,7 +101,7 @@ def report(paths):
 
     rows.sort(key=lambda r: (len(r[2]), r[0]))
     for p, total, missing, nuove in rows:
-        name = os.path.relpath(p, ROOT) if p.startswith(ROOT) else p
+        name = label(p)
         tag = "complete" if not missing else "missing " + " ".join(missing)
         if nuove:
             tag += "  +" + " ".join(nuove)
@@ -113,7 +119,7 @@ def conteggio(paths, classi):
         total = sum(v for k, v in c.items() if "." not in k)
         if total < 500:
             continue
-        name = os.path.relpath(p, ROOT) if p.startswith(ROOT) else p
+        name = label(p)
         print("  %-46s %9d %s" % (name, total, "".join(
             f"{c[k]:12d}" for k in classi)))
 
@@ -137,7 +143,7 @@ def main():
         args = args[2:]
     paths = args or sorted(
         p for pat in ("*.txt", "*.zip", "*.tar.gz")
-        for p in glob.glob(os.path.join(ROOT, "*", pat)))
+        for p in glob.glob(os.path.join(data_dir(), "*", pat)))
     if classi:
         conteggio(paths, classi)
         return 0

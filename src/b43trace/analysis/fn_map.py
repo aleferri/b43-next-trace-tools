@@ -50,6 +50,7 @@ import os
 import re
 import sys
 
+from b43trace import paths
 from b43trace import tracelib as T
 
 # The fingerprint of an op is what makes it recognizable in another trace: a
@@ -333,7 +334,7 @@ def fingerprints_from_source(srcdir):
 
 
 def mode_fingerprints(args):
-    fp = fingerprints_from_source(args.src)
+    fp = fingerprints_from_source(args.src or paths.driver_src())
     v, idx = vendor_index(args.capture)
 
     # A fingerprint of fewer than three ops identifies nothing: three literal
@@ -392,7 +393,7 @@ def main():
     p = sub.add_parser("fingerprints",
                        help="no harness, literals from the sources")
     p.add_argument("capture")
-    p.add_argument("--src", default=T.SRC)
+    p.add_argument("--src", help="the port sources (default: b43/ of $B43_TREE)")
     p.add_argument("--gap", type=int, default=400)
     p.add_argument("--seeds", type=int, default=60)
     p.set_defaults(fn=mode_fingerprints)

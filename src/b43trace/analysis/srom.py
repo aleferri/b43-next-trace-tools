@@ -64,6 +64,7 @@ import os
 import re
 import sys
 
+from b43trace import paths
 from b43trace import tracelib as T
 
 NV_RE = re.compile(r"^([a-z0-9_]+)=(.+)$")
@@ -72,7 +73,6 @@ NV_RE = re.compile(r"^([a-z0-9_]+)=(.+)$")
 # register write, and must not be read as configuration.
 TABLE_PORTS = (0x000d, 0x000e, 0x000f, 0x0010, 0x0011)
 
-DRIVER = os.path.join(T.SRC, "phy_ac.c")
 
 # SROM fields describing power, gain or the front end: a match here is worth
 # more than one on an administrative field (boardnum, ccode, ...).
@@ -98,9 +98,10 @@ def hexlist(s):
 
 
 def default_nvram():
-    cand = sorted(glob.glob(os.path.join(T.DATA, "*", "*nvram*")))
+    data = paths.data_dir()
+    cand = sorted(glob.glob(os.path.join(data, "*", "*nvram*")))
     if not cand:
-        sys.exit("no NVRAM dump under router-data/: pass one explicitly")
+        sys.exit(f"no NVRAM dump under {data}: pass one explicitly")
     return cand[0]
 
 
@@ -154,10 +155,11 @@ def canonical_fields(path):
 
 def mode_literals(args):
     nvram = args.nvram or default_nvram()
-    if not os.path.exists(DRIVER):
-        sys.exit(f"{DRIVER} not found")
+    driver = os.path.join(paths.driver_src(), "phy_ac.c")
+    if not os.path.exists(driver):
+        sys.exit(f"{driver} not found")
 
-    consts = driver_constants(DRIVER)
+    consts = driver_constants(driver)
     srom = srom_values(nvram)
     canon = canonical_fields(args.canonical) if args.canonical else None
 

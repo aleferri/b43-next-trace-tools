@@ -64,6 +64,7 @@ import os
 import re
 import sys
 
+from b43trace import paths
 from b43trace import tracelib as T
 
 REF = re.compile(r"#(\d{3,7})\b")
@@ -102,10 +103,10 @@ def _comment_part(line):
 def anchors(sources=None):
     """(index, file, line, text) for every anchor inside a comment."""
     out = []
-    names = sources or [n for n in sorted(os.listdir(T.SRC))
+    names = sources or [n for n in sorted(os.listdir(paths.driver_src()))
                         if n.endswith((".c", ".h"))]
     for name in names:
-        path = name if os.path.sep in name else os.path.join(T.SRC, name)
+        path = name if os.path.sep in name else os.path.join(paths.driver_src(), name)
         for n, line in enumerate(open(path, errors="replace"), 1):
             part = _comment_part(line)
             if part is None:
@@ -126,10 +127,10 @@ def anchors_by_function():
     does not enter.
     """
     out = []
-    for name in sorted(os.listdir(T.SRC)):
+    for name in sorted(os.listdir(paths.driver_src())):
         if not name.endswith(".c"):
             continue
-        lines = open(os.path.join(T.SRC, name)).read().split("\n")
+        lines = open(os.path.join(paths.driver_src(), name)).read().split("\n")
         cur, depth, opened = None, 0, False
         for n, line in enumerate(lines, 1):
             if cur is None:
@@ -381,7 +382,7 @@ BLOCK_MARK = re.compile(r'^(\s*)B43_AC_BLOCK\("([^"]+)"\);')
 def resolve_capture(written):
     """The capture path as the filesystem sees it.
 
-    The conf spells paths relative to the repo root, because that is what goes
+    The conf spells paths relative to the driver tree ($B43_TREE), because that is what goes
     into the marker and a marker has to mean the same thing from any working
     directory. Resolution happens here; the written form is what gets
     recorded.
@@ -389,7 +390,7 @@ def resolve_capture(written):
     if os.path.isabs(written):
         return written
     z, sep, inner = written.partition("!")
-    return os.path.join(T.ROOT, z) + sep + inner
+    return os.path.join(paths.driver_tree(), z) + sep + inner
 
 
 def read_conf(path=CONF):
@@ -534,10 +535,10 @@ def mode_write(args):
             per_run.append((written, spans))
 
     touched = wrote = dropped = 0
-    for name in sorted(os.listdir(T.SRC)):
+    for name in sorted(os.listdir(paths.driver_src())):
         if not name.endswith(".c"):
             continue
-        path = os.path.join(T.SRC, name)
+        path = os.path.join(paths.driver_src(), name)
         lines = open(path).read().split("\n")
 
         lines, removed = strip_markers(lines)
