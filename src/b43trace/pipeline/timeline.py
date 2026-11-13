@@ -12,6 +12,8 @@ does on each event is the driver's, and none of it is in this file.
           turn's head 0x07af. The first turn after the switch has neither --
           it only reads the statistics window -- and its marker is the first
           head word of that read, OBJ.RD 0x010e after the host-flag clear.
+          On the HT-PHY (corerev 29), whose turn has no mode change, the
+          turn's first operation, the read of MMIO 0x04d0.
   POLL    a turn of the 150 ms radar-detector timer: PHY.RD 0x0251. The one
           glued to the arm is the driver's own and is not an event.
   NOISE   the noise sample completion, which the core delivers from its
@@ -200,9 +202,39 @@ class BusMarkers:
         return at(ops, i, "OBJ.RD", 0xe0) and at(ops, i + 1, "OBJ.RD", 0xe2)
 
 
+class HtBusMarkers(BusMarkers):
+    """A bus capture of the HT-PHY: the turn opens with a read of 0x04d0, and
+    none of the AC's channel switch, detector or region dump is there."""
+
+    @staticmethod
+    def wd(ops, i):
+        return ops[i][2] == "REG.RD" and ops[i][3].startswith("off=0x04d0")
+
+    @staticmethod
+    def mhf_clear(ops, i):
+        return False
+
+    @staticmethod
+    def arm(ops, i):
+        return False
+
+    @staticmethod
+    def bss_row(ops, i):
+        return False
+
+    @staticmethod
+    def dump(ops, i):
+        return False
+
+
 def markers_for(ops):
     bus = any(op.startswith(("REG.", "WRAP.")) for _, _, op, _ in ops)
-    return BusMarkers if bus else AccessorMarkers
+    if not bus:
+        return AccessorMarkers
+    if not any(BusMarkers.wd(ops, i) for i in range(len(ops))) and \
+            any(HtBusMarkers.wd(ops, i) for i in range(len(ops))):
+        return HtBusMarkers
+    return BusMarkers
 
 
 def events(ops):
