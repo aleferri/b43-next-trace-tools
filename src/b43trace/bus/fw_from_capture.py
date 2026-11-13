@@ -13,8 +13,9 @@ its firmware files, because wl writes the same data through the same ports:
     bsinitvals  the first group of writes to the band registers after it.
 
 The output is a directory b43 can load from (`b43_fw_header` + payload, the
-names the AC port requests) and the raw big-endian ucode the d11 simulator
-and the b43-tools interpreter take:
+names b43 requests for the core revision, --rev: 42 for the AC-PHY, 29 for
+the HT-PHY) and the raw big-endian ucode the d11 simulator and the b43-tools
+interpreter take:
 
     b43trace fw-from-capture router-data/vd625-agcombo/ch36.bin -o /tmp/fw-agcombo
 
@@ -33,6 +34,12 @@ SEL_UCODE = 0
 MACCMD = 0x124
 BAND_REGS = (0x686, 0x680, 0x682, 0x700, 0x684)
 MIN_IV = 32
+
+# The files b43_request_firmware() asks for, by core revision
+NAMES = {
+    42: ("ucode42", "ac1initvals42", "ac1bsinitvals42"),
+    29: ("ucode29_mimo", "ht0initvals29", "ht0bsinitvals29"),
+}
 
 
 def ucode_words(ops):
@@ -83,12 +90,14 @@ def fw_file(kind, payload, size_field):
 
 
 def iv_file(writes):
+    # A 16-bit store as the ARM trap records it carries its register's upper
+    # half; the device takes the low one.
     payload = b""
     for op in writes:
         if op.width == 4:
             payload += struct.pack(">HI", op.off | 0x8000, op.val)
         else:
-            payload += struct.pack(">HH", op.off, op.val)
+            payload += struct.pack(">HH", op.off, op.val & 0xffff)
     return fw_file("i", payload, len(writes))
 
 
@@ -97,7 +106,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("capture")
     ap.add_argument("--format", choices=sorted(mmio2ops.PARSERS))
-    ap.add_argument("--rev", type=int, default=42)
+    ap.add_argument("--rev", type=int, choices=sorted(NAMES), default=42)
     ap.add_argument("-o", "--out", required=True, help="output directory")
     args = ap.parse_args()
 
@@ -110,12 +119,13 @@ def main():
     bs = band_group(ops, hi)
 
     raw = b"".join(struct.pack(">I", w) for w in image)
+    ucode, initvals, bsinitvals = NAMES[args.rev]
     os.makedirs(os.path.join(args.out, "b43"), exist_ok=True)
     files = {
         f"d11ucode{args.rev}.bin": raw,
-        f"b43/ucode{args.rev}.fw": fw_file("u", raw, len(raw)),
-        f"b43/ac1initvals{args.rev}.fw": iv_file(iv),
-        f"b43/ac1bsinitvals{args.rev}.fw": iv_file(bs),
+        f"b43/{ucode}.fw": fw_file("u", raw, len(raw)),
+        f"b43/{initvals}.fw": iv_file(iv),
+        f"b43/{bsinitvals}.fw": iv_file(bs),
     }
     for name, data in files.items():
         with open(os.path.join(args.out, name), "wb") as f:
