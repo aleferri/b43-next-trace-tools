@@ -3,6 +3,8 @@
 The port, its unit harness and the wl-diag captures are in a b43-ac-wip
 checkout, named by $B43_TREE. $B43_DATA overrides where the captures are
 taken from: a directory with one subdirectory per board, as router-data/.
+The wl-mmio-trap captures are in a b43-next-traces checkout, named by
+$B43_TRACES.
 """
 import os
 
@@ -54,3 +56,8 @@ def data_dir(required=True):
         return value
     tree = driver_tree(required)
     return os.path.join(tree, "router-data") if tree else None
+
+
+def traces_repo(required=True):
+    """The b43-next-traces checkout, $B43_TRACES."""
+    return _directory("B43_TRACES", "the b43-next-traces checkout", required)

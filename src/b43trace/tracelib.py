@@ -15,6 +15,8 @@ the same question, so they live here and not in the callers.
 import bisect
 import collections
 import difflib
+import glob
+import gzip
 import os
 import re
 import subprocess
@@ -236,10 +238,12 @@ def read_port(path):
 
 
 def open_trace(path):
-    """A trace file, including inside a zip with the `zip!inner` syntax."""
+    """A trace file, gzipped or inside a zip with the `zip!inner` syntax."""
     if "!" in path:
         z, inner = path.split("!", 1)
         return _ZipLines(z, inner)
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt", errors="replace")
     return open(path, errors="replace")
 
 
@@ -377,16 +381,20 @@ def count_keys(path, keyfn=key):
 
 
 def materialize(path):
-    """A real filesystem path for `path`, extracting from a zip if needed.
+    """A real filesystem path for `path`, extracting it if needed.
 
-    Tools that hand the path to another process cannot pass the
-    `archive.zip!inner.txt` form: only open_trace() understands it.
+    Tools that read the file themselves cannot take the
+    `archive.zip!inner.txt` form or a gzipped trace: only open_trace() does.
     """
-    if "!" not in path:
+    if "!" in path:
+        z, inner = path.split("!", 1)
+        with zipfile.ZipFile(z) as zf:
+            data = zf.read(inner)
+    elif path.endswith(".gz"):
+        with gzip.open(path) as f:
+            data = f.read()
+    else:
         return path
-    z, inner = path.split("!", 1)
-    with zipfile.ZipFile(z) as zf:
-        data = zf.read(inner)
     tmp = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
     tmp.write(data)
     tmp.close()
@@ -432,6 +440,33 @@ def captures(include_zips=True):
                     if re.search(r"LEGGIMI|README", one):
                         continue
                     out.append((f"{board}/{name}!{one}", f"{path}!{one}"))
+    return out
+
+
+
+MmioCapture = collections.namedtuple("MmioCapture", "label board ops raw")
+
+
+def mmio_captures():
+    """Every wl-mmio-trap capture of the b43-next-traces checkout.
+
+    The layout is `<chip>/<board>/traces/<set>/`: a capture is the
+    `<stem>-ops.txt.gz` mmio2ops decoded, next to its raw records,
+    `<stem>.bin.gz` or `<stem>-full.bin.gz`. Returns [MmioCapture]: the label
+    `<chip>/<board>/<set>/<stem>`, the board directory, which holds the
+    board's nvram, SROM and OTP dumps, and the two paths, raw None when the
+    records are missing.
+    """
+    root = paths.traces_repo()
+    out = []
+    pattern = os.path.join(root, "*", "*", "traces", "*", "*-ops.txt.gz")
+    for ops in sorted(glob.glob(pattern)):
+        stem = ops[:-len("-ops.txt.gz")]
+        raw = next((r for r in (stem + ".bin.gz", stem + "-full.bin.gz")
+                    if os.path.exists(r)), None)
+        chip, board, _, group, name = os.path.relpath(stem, root).split(os.sep)
+        out.append(MmioCapture(f"{chip}/{board}/{group}/{name}",
+                               os.path.join(root, chip, board), ops, raw))
     return out
 
 

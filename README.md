@@ -22,7 +22,8 @@ The tools that read the port or its unit harness take them from the
 b43-ac-wip checkout named by `B43_TREE`. The wl-diag captures are taken from
 its `router-data/`, or from `B43_DATA`, a directory with one subdirectory per
 board. `anchors` resolves the capture paths of `capture-refs.conf` against
-`B43_TREE`, which is what they are relative to.
+`B43_TREE`, which is what they are relative to. The wl-mmio-trap captures
+are taken from the b43-next-traces checkout named by `B43_TRACES`.
 
 ## Trace pipeline
 
@@ -57,6 +58,9 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
 
 - **decode-wl-mmio** decodes the records of `wl-mmio-trap`, the raw accesses
   and the TX descriptors read at their index write.
+- **mmio-captures** lists the wl-mmio-trap captures of b43-next-traces: per
+  capture the label (`chip/board/set/stem`), the `-ops.txt.gz` mmio2ops
+  decoded and the raw `.bin.gz`.
 - **mmio2ops** decodes raw BAR0 accesses, an x86 mmiotrace, the binary
   records of `wl-mmio-trap` or the bpftrace and ftrace kprobe captures of
   the hybrid `wl`'s accessors, into the same vocabulary (`PHY.*`, `RAD.*`,
@@ -82,8 +86,10 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
 ## Libraries
 
 - **`b43trace.tracelib`**: parsing, op normalisation, attribution of each op
-  to its function through the marker stack, capture discovery inside archives
-  (`archive.zip!inner.txt`). It defines "the same op".
+  to its function through the marker stack, capture discovery: the wl-diag
+  ones of `router-data/`, inside archives too (`archive.zip!inner.txt`), and
+  the wl-mmio-trap ones of b43-next-traces. It reads gzipped traces. It
+  defines "the same op".
 - **`b43trace.d11.ac_txh`**: the d11 AC TX header as the stock driver hands
   it to DMA, shared by both decoders: packet info, rate blocks with the PHY
   TX control words, the PLCP read as L-SIG, HT-SIG or VHT-SIG-A, the 802.11
