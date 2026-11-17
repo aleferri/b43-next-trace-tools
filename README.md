@@ -69,8 +69,7 @@ needed by hand for a gate. The comparison itself is `test/unit/compare.py`
   (`--mark-windows`), except in the ftrace captures, which record the PCI
   config writes: there it is known, and the other cores' accesses are
   `CORE.*`. `--erom` lists the cores, `--srom` writes the SROM words.
-  A 32-bit shared-memory access is split low half first, and the PHY_VER read
-  after every PHY write is dropped unless `--keep-flush`.
+  A 32-bit shared-memory access is split low half first.
 - **ops-fold** `fold` rebuilds accessor-level ops from their bus footprint
   (the MOD mask as `rd ^ wr` is a lower bound); `report` lists window moves,
   polls, interrupt reasons, DMA activity and pauses.

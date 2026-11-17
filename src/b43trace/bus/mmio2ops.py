@@ -606,8 +606,6 @@ def main():
                     help="expand auto-increment runs into single OBJ ops")
     ap.add_argument("--mark-windows", action="store_true",
                     help="emit a WIN line where the sliding window is inferred to move")
-    ap.add_argument("--keep-flush", action="store_true",
-                    help="keep the PHY_VER read that follows PHY writes (wl's write flush)")
     ap.add_argument("--keep-delay", action="store_true",
                     help="emit wl's osl_delay calls as DELAY us=N lines (bpftrace and ftrace only)")
     args = ap.parse_args()
@@ -631,8 +629,6 @@ def main():
     out = open(args.out, "w") if args.out else sys.stdout
     n = 0
     for ts, line in dec.decode(ops):
-        if not args.keep_flush and line.startswith("REG.RD off=0x03e0"):
-            continue
         n += 1
         out.write(f"{ts:15.6f} #{n:<8} cpu0 {line}\n")
     if args.out:
