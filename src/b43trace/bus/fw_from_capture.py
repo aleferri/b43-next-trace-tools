@@ -10,7 +10,11 @@ its firmware files, because wl writes the same data through the same ports:
                 on: wl's init list is written blind, every other phase of
                 the bring-up reads something back, and a command is the
                 driver's, not a value of the list;
-    bsinitvals  the first group of writes to the band registers after it.
+    bsinitvals  the run of blind writes that starts with the first group of
+                writes to the band registers after it.
+
+A run ends at the first read; an OBJADDR write right before that read is the
+select of the driver's own access that follows, not a value of the list.
 
 The output is a directory b43 can load from (`b43_fw_header` + payload, the
 names b43 requests for the core revision, --rev: 42 for the AC-PHY, 29 for
@@ -63,13 +67,21 @@ def ucode_words(ops):
     return image, last
 
 
+def blind_end(ops, i):
+    """End of the run of blind writes from i, as the module docstring has it."""
+    j = i
+    while j < len(ops) and ops[j].kind == "W" and ops[j].off < D11_LIMIT:
+        j += 1
+    if j > i and j < len(ops) and ops[j - 1].off == OBJADDR:
+        j -= 1
+    return j
+
+
 def blind_run(ops, start):
     """Bounds of the initvals run, as the module docstring defines it."""
     i = start
     while i < len(ops):
-        j = i
-        while j < len(ops) and ops[j].kind == "W" and ops[j].off < D11_LIMIT:
-            j += 1
+        j = blind_end(ops, i)
         if j - i >= MIN_IV:
             cmds = [k for k in range(i, j) if ops[k].off == MACCMD]
             return (cmds[-1] + 1 if cmds else i), j
@@ -82,7 +94,7 @@ def band_group(ops, start):
         group = ops[i:i + len(BAND_REGS)]
         if all(op.kind == "W" and op.off == reg
                for op, reg in zip(group, BAND_REGS)):
-            return group
+            return ops[i:blind_end(ops, i)]
     sys.exit("no bsinitvals group after the initvals")
 
 
