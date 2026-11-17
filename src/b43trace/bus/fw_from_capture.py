@@ -14,7 +14,7 @@ its firmware files, because wl writes the same data through the same ports:
 
 The output is a directory b43 can load from (`b43_fw_header` + payload, the
 names b43 requests for the core revision, --rev: 42 for the AC-PHY, 29 for
-the HT-PHY) and the raw big-endian ucode the d11 simulator and the b43-tools
+the HT-PHY, 24 for the LCN-PHY) and the raw big-endian ucode the d11 simulator and the b43-tools
 interpreter take:
 
     b43trace fw-from-capture router-data/vd625-agcombo/ch36.bin -o /tmp/fw-agcombo
@@ -39,6 +39,7 @@ MIN_IV = 32
 NAMES = {
     42: ("ucode42", "ac1initvals42", "ac1bsinitvals42"),
     29: ("ucode29_mimo", "ht0initvals29", "ht0bsinitvals29"),
+    24: ("ucode24_lcn", "lcn0initvals24", "lcn0bsinitvals24"),
 }
 
 
