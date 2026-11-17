@@ -58,6 +58,9 @@ OBJDATA = 0x164
 OBJDATA_HI = 0x166
 RADIO_CTL = 0x3d8
 RADIO_DATA = 0x3da
+# The radio registers of D11 cores before rev 24 (the BCM4312's 15)
+RADIO_CTL_OLD = 0x3f6
+RADIO_DATA_OLD = 0x3fa
 PHY_VER = 0x3e0
 PHY_CTL = 0x3fc
 PHY_DATA = 0x3fe
@@ -415,7 +418,7 @@ class Decoder:
         # A read of an address register is the posted-write flush of the
         # write before it (the MIPS routers do one after every address
         # write); it is a bus operation of its own and stays in the output.
-        if o in (PHY_CTL, RADIO_CTL, OBJADDR) and op.kind == "R" and w != 4 \
+        if o in (PHY_CTL, RADIO_CTL, RADIO_CTL_OLD, OBJADDR) and op.kind == "R" and w != 4 \
                 or o == OBJADDR and op.kind == "R":
             yield f"REG.RD off=0x{o:04x} val={hexw(op)}"
             return
@@ -444,10 +447,10 @@ class Decoder:
             else:
                 yield f"PHY.{rw(op)} addr=0x{self.phy_addr or 0:04x} val=0x{v & 0xffff:04x}"
             return
-        if o == RADIO_CTL and w == 2:
+        if o in (RADIO_CTL, RADIO_CTL_OLD) and w == 2:
             self.radio_addr = v
             return
-        if o == RADIO_DATA:
+        if o in (RADIO_DATA, RADIO_DATA_OLD):
             yield f"RAD.{rw(op)} addr=0x{self.radio_addr or 0:04x} val=0x{v:04x}"
             return
         if o == OBJADDR:
