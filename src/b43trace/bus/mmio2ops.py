@@ -110,11 +110,16 @@ Op = collections.namedtuple("Op", "ts kind width off val")
 
 
 def parse_mmiotrace(path):
+    """Accesses of an mmiotrace capture. BAR0 is where its MAP line put it,
+    or the archer-t5e's BAR0 if the capture has none."""
+    base = BAR0
     for line in open(path):
+        if line.startswith("MAP "):
+            base = int(line.split()[3], 16)
         if line[0] not in "RW":
             continue
         f = line.split()
-        yield Op(float(f[2]), f[0], int(f[1]), int(f[4], 16) - BAR0, int(f[5], 16))
+        yield Op(float(f[2]), f[0], int(f[1]), int(f[4], 16) - base, int(f[5], 16))
 
 
 # struct wl_mmio_rec of device/wl-mmio-trap/wl_mmio_trap_main.c, packed, big-endian.
