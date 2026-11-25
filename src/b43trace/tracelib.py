@@ -15,6 +15,7 @@ the same question, so they live here and not in the callers.
 import bisect
 import collections
 import difflib
+import functools
 import glob
 import gzip
 import os
@@ -42,6 +43,7 @@ _ADDR = re.compile(r"\baddr=(0x[0-9a-fA-F]+)")
 _CLASS = re.compile(r"^([A-Z]{2,7})\.([A-Z]+)")
 
 
+@functools.lru_cache(maxsize=32768)
 def norm(op):
     """Canonical form of an op, for comparing the two sides.
 
