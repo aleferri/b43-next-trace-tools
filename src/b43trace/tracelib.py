@@ -149,6 +149,11 @@ _WIDE = re.compile(r"^PHY\.(RD|WR)W\s+(val=\S+)")
 _PHY_SEL = re.compile(r"^PHY\.(?:RD|WR|MOD|AND|OR)\s+addr=(\S+)")
 
 
+@functools.lru_cache(maxsize=32768)
+def _unfold_bus_cached(op):
+    return tuple(unfold_bus(op))
+
+
 def unfold_bus_seq(raw_ops):
     """unfold_bus() over a whole trace, with the one case that needs lookahead.
 
@@ -177,18 +182,23 @@ def unfold_bus_seq(raw_ops):
             out.append(norm(f"PHY.{w.group(1)} addr={sel} {w.group(2)}"))
             i += 1
             continue
-        a = _PHY_SEL.match(norm(op))
+        canonical = norm(op)
+        a = _PHY_SEL.match(canonical)
         if a:
             sel = a.group(1)
-        m = _MOD.match(norm(op))
-        if m and m.group(1) == "RAD" and i + 2 < n:
-            r = _RD_OF.match(norm(raw_ops[i + 1]))
-            w = _RAD_WR.match(norm(raw_ops[i + 2]))
-            if (r and r.group(1) == "RAD" and r.group(2) == m.group(2) and
-                    w and w.group(1) == m.group(2)):
-                i += 1
-                continue
-        out.extend(unfold_bus(op))
+        if canonical.startswith("RAD.MOD ") and i + 2 < n:
+            m = _MOD.match(canonical)
+            if m:
+                r = _RD_OF.match(norm(raw_ops[i + 1]))
+                w = _RAD_WR.match(norm(raw_ops[i + 2]))
+                if (r and r.group(1) == "RAD" and r.group(2) == m.group(2) and
+                        w and w.group(1) == m.group(2)):
+                    i += 1
+                    continue
+        if op.startswith("OBJ.BULK"):
+            out.extend(unfold_bus(op))
+        else:
+            out.extend(_unfold_bus_cached(op))
         i += 1
     return out
 
