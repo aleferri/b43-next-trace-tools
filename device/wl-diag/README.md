@@ -63,7 +63,7 @@ through object memory
 - **Op codes** are the same numbers in both tracers (2.6.30 has 1-50, 55-59
   and 65-66, 3.4 1-59 and 65-66); a new op goes at the end of all three enums.
   60-64 belong to `../wl-mmio-trap/`, whose records merge into the same
-  streams: the next op here is 67. Hook-table fields use
+  streams: the next op here is 68. Hook-table fields use
   designated initializers: a positional field once shifted `retcap` to false
   for every hook.
 
@@ -136,10 +136,18 @@ insmod wl_diag.ko arm=1
 Unloading `wl_diag` with a reader open ends the reader with EOF instead of
 failing with `-EBUSY`.
 
-The bus traffic is not in this stream. On this `wl` every register access
-goes through `osl_read*`/`osl_write*`, functions of `wl.ko`'s own
-`linux_osl.c`, which `b43trace mmio2ops` already reads from ftrace or
-bpftrace kprobes (its `ftrace` and `bpftrace` formats).
+On this `wl` every register access goes through `osl_read*`/`osl_write*`,
+functions of `wl.ko`'s own `linux_osl.c`. With `bus=1` they are hooked too,
+so the accesses and the calls that make them come in one stream, in order:
+`MMIO.RD`/`MMIO.WR` (60, 61) as `../wl-mmio-trap/` records them, the offset
+into BAR0 with the device-offset flag in `aux`, and `PCICFG.WR` (67) for the
+config writes that move the window. BAR0's mapping is the `regs` argument of
+`si_attach()`; accesses outside it, or before it, are counted at disarm and
+not recorded. `b43trace mmio2ops --format wl-diag` decodes the accesses, with
+the window known from the config writes; `decode-wl-diag` prints them beside
+the calls. With `bus=1` the 60 hooks attach to `wl.ko`; that `si_attach()`'s
+`regs` is the mapping the accesses go through is read off `wl_linux.c` and
+the disassembly, not yet seen on a device.
 
 ## Checking the plan before flashing
 
@@ -163,6 +171,7 @@ of interest is `b43trace callsites-pic`'s question.
 |-------|---------|---------|
 | `arm` | `0` | `0` = dry run, log the hook plan only; `1` = apply the patches |
 | `target` | `wl` | module to hook. Hooks arm at its `MODULE_STATE_COMING` and disarm at `GOING`; on 3.4, symbols resolved in other modules are discarded |
+| `bus` | `0` | x86_64 only: `1` = also every register access and PCI config write, see "x86_64" |
 | `delay` | `0` | `1` = also hook `osl_delay` (noisy) |
 | `fifo_recs` | `131072` on 3.4, `8192` on 2.6.30 | queue records, 28 bytes each. On 3.4 the queue is allocated with `vmalloc` and the default is 3.5 MB, ~25 s of margin |
 | `skipphyrd` | empty | **PHY register** reads not to record, e.g. `"0x253,0x254"` |

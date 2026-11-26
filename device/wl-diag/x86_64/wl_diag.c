@@ -11,7 +11,8 @@
  *   recorded are cut to the record's 32 bits;
  * - kallsyms_lookup_name is not exported, so kprobes resolves "<target>:<n>"
  *   itself, and the dry run registers each probe disabled and removes it;
- * - the hook table is the x86 blob's, signatures checked on its disassembly.
+ * - the hook table is the x86 blob's, signatures checked on its disassembly;
+ * - with bus=1 the stream has the register accesses too, see "bus" below.
  */
 
 #include <linux/module.h>
@@ -43,6 +44,10 @@ MODULE_PARM_DESC(target, "name of the module to hook (default wl)");
 static int delay;
 module_param(delay, int, 0444);
 MODULE_PARM_DESC(delay, "0=do not hook osl_delay (default), 1=hook it");
+
+static int bus;
+module_param(bus, int, 0444);
+MODULE_PARM_DESC(bus, "0=function hooks only (default), 1=also every register access and PCI config write");
 
 static int maxactive = 64;
 module_param(maxactive, int, 0444);
@@ -77,8 +82,10 @@ enum wldiag_op {
 	OP_TX_PKT, OP_TX_DATA,
 	OP_TPL_DATA,
 	OP_RX_PKT, OP_RX_DATA,
-	/* 60-64 are wl-mmio-trap's */
+	/* 60-64 are wl-mmio-trap's; this variant writes 60 and 61 as it does */
+	OP_MMIO_R = 60, OP_MMIO_W,
 	OP_TXS = 65, OP_TXS_DATA,
+	OP_PCICFG_W,
 	OP_DROP = 255,
 };
 struct wldiag_rec {
@@ -233,6 +240,32 @@ static void mark(const char *s)
 	emit_mark(b);
 }
 
+/* ---- bus ------------------------------------------------------------- *
+ * On this wl every register access goes through osl_read{b,w,l} and
+ * osl_write{b,w,l}, functions of wl.ko's linux_osl.c. With bus=1 they are
+ * hooked and recorded as wl-mmio-trap records them: MMIO.RD/WR with the
+ * offset into BAR0, the value, and in aux the width and AUX_DEV_OFFSET, the
+ * offset being the device's on a little-endian host. A read goes out at its
+ * return, with its value. BAR0's mapping is the regs argument of si_attach(); an access
+ * outside it, or before it, is counted and not recorded. The config writes
+ * that move the window are PCICFG.WR: offset, value, size.
+ */
+#define AUX_DEV_OFFSET	0x200
+#define BAR0_SIZE	0x4000		/* PCI_BAR0_WINSZ */
+static unsigned long bar0;
+static atomic_t unplaced = ATOMIC_INIT(0);
+
+static u32 bus_rec(u8 op, unsigned long va, u32 val, u8 width)
+{
+	unsigned long base = READ_ONCE(bar0);
+
+	if (!base || va < base || va - base >= BAR0_SIZE) {
+		atomic_inc(&unplaced);
+		return 0;
+	}
+	return emit(op, va - base, val, width | AUX_DEV_OFFSET);
+}
+
 /* ---- hook table ------------------------------------------------------- *
  * Each source field takes an argument: 0=absent(->0), 1=a1, 2=a2, 3=a3, the
  * 2nd to 4th. The entries are ../4-4-arm's that the 6.30.223.271 blob has,
@@ -243,7 +276,8 @@ static void mark(const char *s)
  *   the same struct, the AC-PHY's have the arguments of the routers' entry;
  * - wlc_phy_chanspec_set, the PHYs' common entry on 6.30, as ../2-6-30;
  * - no fallbacks: the objmem16 accessors and hnddma's dma64_* have no
- *   symbol in this blob, so the shm thunks and wlc_txfifo are the hooks.
+ *   symbol in this blob, so the shm thunks and wlc_txfifo are the hooks;
+ * - the bus hooks, attached with bus=1 only.
  */
 struct hook {
 	const char *name;
@@ -252,6 +286,8 @@ struct hook {
 	u8 nargx;		/* the 5th and 6th arguments in an ARGX record */
 	bool txraw;		/* OP_TX_PKT: a1 is a buffer, a2 its length */
 	bool tblinfo;		/* OP_TBL_*: a1 is a struct wd_phytbl_info * */
+	u8 width;		/* OP_MMIO_*: osl_read*(r) or osl_write*(v, r) */
+	bool bar0;		/* si_attach(): a2 is BAR0's mapping */
 	/* state */
 	bool armed;
 	struct kprobe kp;
@@ -310,6 +346,14 @@ static struct hook hooks[] = {
 	{ "wlc_txfifo", OP_TX_PKT, 2, 0, 0 },
 	{ "wlc_recv", OP_RX_PKT, 1, 0, 0 },
 	{ "wlc_dotxstatus", OP_TXS, 1, 2, 0 },
+	{ "si_attach", 0, .bar0 = true },
+	{ "osl_readb", OP_MMIO_R, .width = 1, .retcap = true },
+	{ "osl_readw", OP_MMIO_R, .width = 2, .retcap = true },
+	{ "osl_readl", OP_MMIO_R, .width = 4, .retcap = true },
+	{ "osl_writeb", OP_MMIO_W, .width = 1 },
+	{ "osl_writew", OP_MMIO_W, .width = 2 },
+	{ "osl_writel", OP_MMIO_W, .width = 4 },
+	{ "osl_pci_write_config", OP_PCICFG_W, 1, 3, 2 },
 };
 #define NHOOK ARRAY_SIZE(hooks)
 
@@ -495,7 +539,12 @@ static u32 wd_hook(const struct hook *h, struct pt_regs *regs)
 	for (i = 0; i < 4; i++)
 		a[i] = regs_get_kernel_argument(regs, i);
 
-	if (h->tblinfo) {
+	if (h->bar0) {
+		WRITE_ONCE(bar0, a[2]);
+		s = 0;
+	} else if (h->width) {
+		s = bus_rec(h->op, a[1], a[0], h->width);
+	} else if (h->tblinfo) {
 		s = tbl_rec(h->op, a[1]);
 	} else {
 		switch (h->op) {
@@ -555,6 +604,22 @@ static int wd_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 	return 0;
 }
 
+static int bus_ret_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	*(unsigned long *)ri->data = regs_get_kernel_argument(regs, 0);
+	return 0;
+}
+
+static int bus_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	const struct hook *h = container_of(get_kretprobe(ri), struct hook, krp);
+	u32 mask = h->width == 4 ? ~0u : (1u << (8 * h->width)) - 1;
+
+	bus_rec(h->op, *(unsigned long *)ri->data,
+		regs_return_value(regs) & mask, h->width);
+	return 0;
+}
+
 /* ---- plan, arming, disarming ------------------------------------------ */
 
 static DEFINE_MUTEX(arm_lock);
@@ -570,9 +635,9 @@ static struct kprobe *attach(struct hook *h, char *sym, u32 flags, int *err)
 		memset(&h->krp, 0, sizeof(h->krp));
 		h->krp.kp.symbol_name = sym;
 		h->krp.kp.flags = flags;
-		h->krp.entry_handler = wd_ret_entry;
-		h->krp.handler = wd_ret;
-		h->krp.data_size = sizeof(u32);
+		h->krp.entry_handler = h->width ? bus_ret_entry : wd_ret_entry;
+		h->krp.handler = h->width ? bus_ret : wd_ret;
+		h->krp.data_size = sizeof(unsigned long);
 		h->krp.maxactive = maxactive;
 		*err = register_kretprobe(&h->krp);
 		return *err ? NULL : &h->krp.kp;
@@ -602,6 +667,7 @@ static int arma(void)
 	static char syms[NHOOK][MODULE_NAME_LEN + 1 + 40];
 	int i, found = 0, armed = 0;
 
+	WRITE_ONCE(bar0, 0);
 	for (i = 0; i < NHOOK; i++) {
 		struct hook *h = &hooks[i];
 		const char *kind = h->retcap ? "kretprobe" : "kprobe";
@@ -610,6 +676,8 @@ static int arma(void)
 
 		h->armed = false;
 		if (h->op == OP_DELAY && !delay)
+			continue;
+		if ((h->width || h->bar0 || h->op == OP_PCICFG_W) && !bus)
 			continue;
 		snprintf(syms[i], sizeof(syms[i]), "%s:%s", target, h->name);
 		kp = attach(h, syms[i], arm ? 0 : KPROBE_FLAG_DISABLED, &err);
@@ -668,6 +736,9 @@ static void disarma(void)
 				h->name, h->krp.nmissed, maxactive);
 		h->armed = false;
 	}
+	if (atomic_read(&unplaced))
+		pr_warn("wl_diag: %d register accesses outside BAR0 not recorded\n",
+			atomic_xchg(&unplaced, 0));
 }
 
 static int wd_mod_notify(struct notifier_block *nb, unsigned long ev, void *data)

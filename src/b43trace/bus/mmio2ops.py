@@ -1,6 +1,6 @@
 """Decode a bus-level capture of a PCIe BCMA wireless chip into op classes.
 
-Five capture formats, the same device traffic:
+Six capture formats, the same device traffic:
 
     mmiotrace     the Linux kernel's mmiotrace text, taken on an x86 host
                   (router-data/archer-t5e);
@@ -14,7 +14,9 @@ Five capture formats, the same device traffic:
                   hybrid wl's osl_read*/osl_write* (router-data/macbookair6-1);
     ftrace        the kprobe events of the same accessors as the ftrace
                   buffer prints them, plus osl_pci_write_config
-                  (router-data/macbookair6-1, the wl-firstload and wl-tx ones).
+                  (router-data/macbookair6-1, the wl-firstload and wl-tx ones);
+    wl-diag       the same accessors and config writes in the records of
+                  device/wl-diag/x86_64/, loaded with bus=1.
 
 The trace is the raw MMIO traffic on BAR0 (16 KiB, PCIe gen2 layout):
 
@@ -26,9 +28,10 @@ The trace is the raw MMIO traffic on BAR0 (16 KiB, PCIe gen2 layout):
 The window moves through PCI config space, which mmiotrace does not record,
 so the core behind the sliding window is inferred: unambiguous register
 offsets (chipcommon OTP/SROM/PMU words, D11 PHY/radio/SHM ports, ...) set
-the state, ambiguous ones inherit it. The ftrace captures record the config
-writes: there the window is known, the cores come from the EROM the driver
-reads, and an access to a core other than chipcommon and D11 is CORE.*.
+the state, ambiguous ones inherit it. The ftrace and wl-diag captures record
+the config writes: there the window is known, the cores come from the EROM
+the driver reads, and an access to a core other than chipcommon and D11 is
+CORE.*.
 The other config writes are PCICFG.WR.
 
 Output lines follow the vendor capture format read by tracelib.py:
@@ -153,23 +156,56 @@ def parse_wl_mmio_trap_arm(path):
     return parse_wl_mmio_trap(path, dev_offsets=True)
 
 
-def parse_wl_mmio_trap(path, dev_offsets=False):
-    """Records of a wl_mmio_trap capture; marks come as kind 'M' with the
-    label in `val`, drops are reported on stderr, as the queue loses them."""
+def trap_records(path):
+    """(seconds, seq, addr, val, aux, op) of each record of a capture."""
     data = open(path, "rb").read()
     if len(data) % TRAP_REC.size:
         print(f"{path}: {len(data) % TRAP_REC.size} trailing bytes ignored",
               file=sys.stderr)
     for i in range(0, len(data) - TRAP_REC.size + 1, TRAP_REC.size):
-        ts, seq, addr, val, aux, op, cpu, _ = TRAP_REC.unpack_from(data, i)
-        t = ts / 1e9
+        ts, seq, addr, val, aux, op, _, _ = TRAP_REC.unpack_from(data, i)
+        yield ts / 1e9, seq, addr, val, aux, op
+
+
+def trap_label(addr, val, aux):
+    raw = b"".join(w.to_bytes(4, "big") for w in (addr, val, aux))
+    return raw.split(b"\0")[0].decode("ascii", "replace")
+
+
+def parse_wl_mmio_trap(path, dev_offsets=False):
+    """Records of a wl_mmio_trap capture; marks come as kind 'M' with the
+    label in `val`, drops are reported on stderr, as the queue loses them."""
+    for t, seq, addr, val, aux, op in trap_records(path):
         if op in (TRAP_RD, TRAP_WR):
             width = aux & TRAP_AUX_WIDTH
             yield Op(t, "R" if op == TRAP_RD else "W", width,
                      trap_device_offset(addr, width, aux, dev_offsets), val)
         elif op == TRAP_MARK:
-            raw = b"".join(w.to_bytes(4, "big") for w in (addr, val, aux))
-            yield Op(t, "M", 0, 0, raw.split(b"\0")[0].decode("ascii", "replace"))
+            yield Op(t, "M", 0, 0, trap_label(addr, val, aux))
+        elif op == TRAP_DROP:
+            print(f"{path}: {aux} records dropped before #{seq}", file=sys.stderr)
+
+
+# wl_diag's own codes for what x86_64/wl_diag.c records beside the accesses
+DIAG_DELAY, DIAG_MARK, DIAG_PCICFG_W = 15, 39, 67
+
+
+def parse_wl_diag(path, keep_delay=False):
+    """The bus side of a capture of device/wl-diag/x86_64/ taken with bus=1:
+    its MMIO records are wl_mmio_trap's, its marks and osl_delay calls
+    wl_diag's, its config writes kind 'C' as in ftrace. The calls of the
+    accessors around them are skipped: decode-wl-diag prints them."""
+    for t, seq, addr, val, aux, op in trap_records(path):
+        if op in (TRAP_RD, TRAP_WR):
+            width = aux & TRAP_AUX_WIDTH
+            yield Op(t, "R" if op == TRAP_RD else "W", width,
+                     trap_device_offset(addr, width, aux, False), val)
+        elif op == DIAG_PCICFG_W:
+            yield Op(t, "C", aux, addr, val)
+        elif op == DIAG_DELAY and keep_delay:
+            yield Op(t, "D", 0, 0, val)
+        elif op == DIAG_MARK:
+            yield Op(t, "M", 0, 0, trap_label(addr, val, aux))
         elif op == TRAP_DROP:
             print(f"{path}: {aux} records dropped before #{seq}", file=sys.stderr)
 
@@ -248,7 +284,8 @@ def parse_ftrace(path, keep_delay=False):
 
 PARSERS = {"mmiotrace": parse_mmiotrace, "wl-mmio-trap": parse_wl_mmio_trap,
            "wl-mmio-trap-arm": parse_wl_mmio_trap_arm,
-           "bpftrace": parse_bpftrace, "ftrace": parse_ftrace}
+           "bpftrace": parse_bpftrace, "ftrace": parse_ftrace,
+           "wl-diag": parse_wl_diag}
 
 
 def guess_format(path):
@@ -600,7 +637,7 @@ def main():
     ap.add_argument("trace")
     ap.add_argument("--format", choices=sorted(PARSERS),
                     help="capture format (default: binary is wl-mmio-trap, text is mmiotrace; "
-                         "bpftrace must be named)")
+                         "bpftrace and wl-diag must be named)")
     ap.add_argument("-o", "--out", help="decoded ops (default: stdout)")
     ap.add_argument("--srom", help="write the SROM words read through the chipcommon alias here")
     ap.add_argument("--erom", action="store_true",
@@ -610,12 +647,12 @@ def main():
     ap.add_argument("--mark-windows", action="store_true",
                     help="emit a WIN line where the sliding window is inferred to move")
     ap.add_argument("--keep-delay", action="store_true",
-                    help="emit wl's osl_delay calls as DELAY us=N lines (bpftrace and ftrace only)")
+                    help="emit wl's osl_delay calls as DELAY us=N lines (bpftrace, ftrace and wl-diag only)")
     args = ap.parse_args()
 
     fmt = args.format or guess_format(args.trace)
     if args.keep_delay:
-        if fmt not in ("bpftrace", "ftrace"):
+        if fmt not in ("bpftrace", "ftrace", "wl-diag"):
             ap.error(f"--keep-delay: {fmt} captures do not record osl_delay")
         ops = list(PARSERS[fmt](args.trace, keep_delay=True))
     else:

@@ -77,6 +77,11 @@
 # half of XMITSTAT_0 at +32, XMITSTAT_2/3 at +34/+38, the second package at
 # +42..+57, XMITSTAT_1 in a2), in b43_txstatus_dump()'s format and with
 # b43_txstatus_read_ac()'s reading.
+# MMIO.RD (60) / MMIO.WR (61) and PCICFG.WR (67): with bus=1 the x86_64
+# variant records every register access as wl-mmio-trap does, the offset into
+# BAR0 in addr and the width in the low byte of aux, and the PCI config
+# writes, offset in addr, value in val and size in aux. `b43trace mmio2ops
+# --format wl-diag` decodes the accesses into op classes.
 import struct
 import sys
 
@@ -105,6 +110,7 @@ OPS = {
     55: "TX.PKT",     56: "TX.DATA",    57: "TPL.DATA",
     58: "RX.PKT",     59: "RX.DATA",
     65: "TXS",        66: "TXS.DATA",
+    60: "MMIO.RD",    61: "MMIO.WR",    67: "PCICFG.WR",
     26: "CHANSPEC",
     27: "TPL.PTRW",  28: "TPL.DATW",
     29: "TPL.PTRR",  30: "TPL.DATR",  31: "TPL.RAMW",
@@ -157,6 +163,8 @@ COREREG  = 21                             # core reg: off=addr(a2), core=aux(a1)
 #   RETVAL(23): value returned by a read/rmw -> parent=addr, val=val
 ARGX     = 22
 RETVAL   = 23
+MMIO     = {60, 61}                       # off=addr, width=aux&0xff
+PCICFG_W = 67                             # off=addr, val, size=aux
 
 
 def h(v, wide):
@@ -335,6 +343,13 @@ def main():
                 print(f"{t:14.6f} #{seq:<8} cpu{cpu} {name:<8} {chanspec(addr)}")
             elif op == 255:
                 print(f"{t:14.6f}  cpu{cpu}  ** DROP **  persi={aux}")
+            elif op in MMIO:                       # register access, BAR0 offset
+                width = aux & 0xff
+                print(f"{t:14.6f} #{seq:<8} cpu{cpu} {name:<8} "
+                      f"off={h(addr, False)} val={h(val, width == 4)} w={width}")
+            elif op == PCICFG_W:
+                print(f"{t:14.6f} #{seq:<8} cpu{cpu} {name:<9} "
+                      f"off=0x{addr:02x} val={h(val, True)} size={aux}")
             elif op == DELAY:                      # no addr; duration in usec
                 print(f"{t:14.6f} #{seq:<8} cpu{cpu} {name:<8} usec={val}")
             elif op in TABLE:                      # table access: id/off/len
