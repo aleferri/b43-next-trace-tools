@@ -5,7 +5,9 @@ with an entry detour (no kprobes) and exposes the records through
 `/proc/wl_diag`. `3-4-11/` targets kernel 3.4 with `wl` 7.14; `2-6-30/`
 targets 2.6.30 with `wl` 6.30; `4-4-arm/` targets kernel 4.4 on ARM (the
 Northstar routers, BCM4709) and attaches with kprobes instead, see "ARM"
-below. The three share the record format and `b43trace decode-wl-diag`. The head of `3-4-11/wl_diag.c` documents the mechanism
+below; `x86_64/` targets the hybrid `wl` of broadcom-sta on a laptop or
+desktop, with kprobes too, see "x86_64". All four share the record format and
+`b43trace decode-wl-diag`. The head of `3-4-11/wl_diag.c` documents the mechanism
 and its limits: MIPS32R1, module memory written in place,
 `flush_icache_range`; the head of `2-6-30/wl_diag.c` lists what the 2.6.30
 variant leaves out.
@@ -95,6 +97,49 @@ If `wl` is already loaded at `insmod` it is hooked straight away, which is
 what a hot capture needs; a cold capture reloads it, as on MIPS. `delay`,
 `target`, `fifo_recs`, `skipphyrd` and the dump parameters are the same;
 `klookup`, `bump_ptr` and `restore_alloc` do not exist there.
+
+## x86_64
+
+`x86_64/` hooks the hybrid `wl` of broadcom-sta, 6.30.223.271 (the
+`wlc_hybrid.o_shipped_x86_64` that distributions ship, with their patches),
+through kprobes as on ARM, on a current kernel with `CONFIG_KPROBES`. Built
+and run on Ubuntu's 6.8.0-151: all 52 hooks resolve in the `wl.ko` built
+from that package and attach, and a stand-in module with the accessors'
+names and signatures gives the records its calls should.
+
+The blob is not stripped and kprobes resolves `wl:<name>`, local symbols
+included. `kallsyms_lookup_name` is not exported since 5.7, so the dry run
+registers each probe disabled, logs it and removes it: nothing is written to
+`wl`'s text, and a hook kprobes refuses shows up there already.
+
+The table is the routers' where the blob has the same accessors, its
+signatures checked on the x86 disassembly. What differs:
+
+- arguments are the 2nd to 4th of the call, the two `nargx` ones the 5th
+  and 6th, in registers; pointers are read whole, the values recorded are
+  cut to 32 bits;
+- `osl_delay(usec)` records its first argument;
+- PHY tables: `wlc_phy_read/write_table(pi, phytbl_info *, ...)`, where the
+  N-, HT-, LCN- and SSLPN-PHY accessors meet, and the LP-PHY's, which take
+  the same struct, record its id, length and offset; the AC-PHY's keep the
+  routers' entry. The table data go through `phy_reg_read`/`phy_reg_write`;
+- `wlc_phy_chanspec_set` as on 2.6.30;
+- no fallbacks: the objmem16 accessors and hnddma's `dma64_*` have no symbol,
+  so the shm thunks and `wlc_txfifo` are the hooks.
+
+```sh
+cd x86_64 && make            # against /lib/modules/$(uname -r)/build
+insmod wl_diag.ko; dmesg | grep wl_diag; rmmod wl_diag   # the plan
+insmod wl_diag.ko arm=1
+```
+
+Unloading `wl_diag` with a reader open ends the reader with EOF instead of
+failing with `-EBUSY`.
+
+The bus traffic is not in this stream. On this `wl` every register access
+goes through `osl_read*`/`osl_write*`, functions of `wl.ko`'s own
+`linux_osl.c`, which `b43trace mmio2ops` already reads from ftrace or
+bpftrace kprobes (its `ftrace` and `bpftrace` formats).
 
 ## Checking the plan before flashing
 
