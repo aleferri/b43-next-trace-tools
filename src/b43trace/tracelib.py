@@ -15,6 +15,7 @@ the same question, so they live here and not in the callers.
 import bisect
 import collections
 import difflib
+import functools
 import glob
 import gzip
 import os
@@ -34,10 +35,15 @@ RE_PORT = re.compile(r"^\s*cpu\d+\s+(.*?)\s*$")
 RE_MARKER = re.compile(r"^-+(/?)(FN|BLK):(\S+?)-+$")
 
 _HEX = re.compile(r"0x0*([0-9a-fA-F]+)")
+_GPIO_OUTEN = re.compile(r"^GPIO\.OUTEN\b")
+_OP_METADATA = re.compile(r"\s+(ret|a5|a6|sel|reg)=\S+")
+_PHY_AND_OR = re.compile(r"PHY\.(AND|OR)\s+addr=(\S+)\s+val=(\S+)")
+_SET_CLR = re.compile(r"\s*\((set|clr)[^)]*\)")
 _ADDR = re.compile(r"\baddr=(0x[0-9a-fA-F]+)")
 _CLASS = re.compile(r"^([A-Z]{2,7})\.([A-Z]+)")
 
 
+@functools.lru_cache(maxsize=32768)
 def norm(op):
     """Canonical form of an op, for comparing the two sides.
 
@@ -67,13 +73,13 @@ def norm(op):
     reader: the offset already says which register it is.
     """
     op = " ".join(op.split())
-    op = re.sub(r"^GPIO\.OUTEN\b", "GPIO.OE", op)
-    op = re.sub(r"\s+(ret|a5|a6|sel|reg)=\S+", "", op)
+    op = _GPIO_OUTEN.sub("GPIO.OE", op)
+    op = _OP_METADATA.sub("", op)
     op = _HEX.sub(lambda m: "0x" + m.group(1).lower(), op)
-    m = re.match(r"PHY\.(AND|OR)\s+addr=(\S+)\s+val=(\S+)", op)
+    m = _PHY_AND_OR.match(op)
     if m:
         op = f"PHY.MOD addr={m.group(2)} val={m.group(3)} mask=0x0"
-    return re.sub(r"\s*\((set|clr)[^)]*\)", "", op)
+    return _SET_CLR.sub("", op)
 
 
 _MOD = re.compile(r"^(PHY|RAD)\.MOD\s+addr=(\S+)\s+val=(\S+)\s+mask=(\S+)$")
@@ -138,8 +144,14 @@ def unfold_bus(op):
 
 
 _RD_OF = re.compile(r"^(PHY|RAD)\.RD\s+addr=(\S+)\s+val=(\S+)")
+_RAD_WR = re.compile(r"^RAD\.WR\s+addr=(\S+)")
 _WIDE = re.compile(r"^PHY\.(RD|WR)W\s+(val=\S+)")
 _PHY_SEL = re.compile(r"^PHY\.(?:RD|WR|MOD|AND|OR)\s+addr=(\S+)")
+
+
+@functools.lru_cache(maxsize=32768)
+def _unfold_bus_cached(op):
+    return tuple(unfold_bus(op))
 
 
 def unfold_bus_seq(raw_ops):
@@ -170,18 +182,23 @@ def unfold_bus_seq(raw_ops):
             out.append(norm(f"PHY.{w.group(1)} addr={sel} {w.group(2)}"))
             i += 1
             continue
-        a = _PHY_SEL.match(norm(op))
+        canonical = norm(op)
+        a = _PHY_SEL.match(canonical)
         if a:
             sel = a.group(1)
-        m = _MOD.match(norm(op))
-        if m and m.group(1) == "RAD" and i + 2 < n:
-            r = _RD_OF.match(norm(raw_ops[i + 1]))
-            w = re.match(r"^RAD\.WR\s+addr=(\S+)", norm(raw_ops[i + 2]))
-            if (r and r.group(1) == "RAD" and r.group(2) == m.group(2) and
-                    w and w.group(1) == m.group(2)):
-                i += 1
-                continue
-        out.extend(unfold_bus(op))
+        if canonical.startswith("RAD.MOD ") and i + 2 < n:
+            m = _MOD.match(canonical)
+            if m:
+                r = _RD_OF.match(norm(raw_ops[i + 1]))
+                w = _RAD_WR.match(norm(raw_ops[i + 2]))
+                if (r and r.group(1) == "RAD" and r.group(2) == m.group(2) and
+                        w and w.group(1) == m.group(2)):
+                    i += 1
+                    continue
+        if op.startswith("OBJ.BULK"):
+            out.extend(unfold_bus(op))
+        else:
+            out.extend(_unfold_bus_cached(op))
         i += 1
     return out
 
