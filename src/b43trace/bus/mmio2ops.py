@@ -450,7 +450,7 @@ class Decoder:
 
     def d11(self, op):
         o, v, w = op.off, op.val, op.width
-        if o not in (OBJDATA, OBJDATA_HI):
+        if self.bulk and o not in (OBJDATA, OBJDATA_HI):
             yield from self.flush_bulk()
         # A read of an address register is the posted-write flush of the
         # write before it (the MIPS routers do one after every address
